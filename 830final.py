@@ -851,6 +851,7 @@ with tabs[2]:
     )
 
 # ---------------- TAB 3: FINANCE & OPS -------------------------
+# ---------------- TAB 3: FINANCE & OPS -------------------------
 with tabs[3]:
     st.header(f"Finance & Operations — {month_focus}")
     st.caption("📊 How volume, discounts, and operations connect for this month.")
@@ -858,21 +859,28 @@ with tabs[3]:
     if not guard(curm, "No rows for this month after filters."):
         st.stop()
 
-    # Wow visual: purchases vs average discount (chart copy)
+    # ==== WOW VISUAL: VOLUME VS DISCOUNT MAP =======================
+    st.subheader("Volume vs Discount Map")
+
     by_cat = (
         chart_curm.groupby("Category_std", as_index=False)
         .agg(
             purchases=("purchased_last_month", "sum"),
-            avg_disc=("discount_percentage", "mean")
+            avg_disc=("discount_percentage", "mean"),
+            reviews=("total_reviews", "sum")
         )
     )
+
     if guard(by_cat, "No category statistics available."):
+        sizes = safe_bubble_sizes(by_cat["reviews"])
         fig1 = px.scatter(
             by_cat,
             x="avg_disc",
             y="purchases",
+            size=sizes,
             color="Category_std",
-            title="Purchases vs Average Discount by Category"
+            title="Purchases vs Average Discount by Category",
+            hover_data=["reviews"]
         )
         fig1.update_layout(
             xaxis_title="Average Discount %",
@@ -880,48 +888,81 @@ with tabs[3]:
         )
         st.plotly_chart(fig1, use_container_width=True)
         st.caption(
-            "Each dot is a category. Higher points show more volume, farther right shows heavier discounting."
+            "Each dot is a category. Higher dots mean more purchases. Farther right means heavier average discounting. "
+            "Bubble size shows review volume."
         )
 
         lead = by_cat.sort_values("purchases", ascending=False).head(1)
         if not lead.empty:
             r = lead.iloc[0]
-            level = "good" if r["avg_disc"] < 25 else "ok"
+            level = "good" if (pd.notna(r['avg_disc']) and r['avg_disc'] < 25) else "ok"
             box_result(
                 "Top Volume Driver",
-                f"{r['Category_std']} drives the most purchases with an average discount of {r['avg_disc']:.1f}%.",
+                f"{r['Category_std']} drives the most purchases with an average discount of "
+                f"{r['avg_disc']:.1f}% and {int(r['reviews']):,} reviews.",
                 level
             )
 
-    # Discount distribution (chart copy)
+    st.markdown("---")
+
+    # ==== DISCOUNT BAND MIX (STACKED VIEW) ==========================
+    st.subheader("Discount Bands by Category")
+
     if "discount_percentage" in chart_curm.columns and chart_curm["discount_percentage"].notna().any():
-        fig2 = px.box(
-            chart_curm.dropna(subset=["discount_percentage"]),
-            x="Category_std",
-            y="discount_percentage",
-            color="Category_std",
-            title="Discount % Distribution by Category"
-        )
-        fig2.update_layout(xaxis_title="", yaxis_title="Discount %")
-        st.plotly_chart(fig2, use_container_width=True)
-        st.caption(
-            "Boxes show how discount levels spread within each category. High medians or long upper tails signal promo dependence."
-        )
-        tone = "bad" if (pd.notna(cur["disc"]) and cur["disc"] >= 30) else "ok"
-        box_result(
-            "Discount Posture",
-            f"Average discount this month is {cur['disc']:.1f}%." if pd.notna(cur["disc"]) else "Average discount not available.",
-            tone
+        band_df = chart_curm.dropna(subset=["discount_percentage"]).copy()
+        band_df["disc_band"] = pd.cut(
+            band_df["discount_percentage"],
+            bins=[-0.01, 0, 10, 20, 30, 100],
+            labels=["0%", "1–10%", "11–20%", "21–30%", "30%+"]
         )
 
+        band_mix = (
+            band_df.groupby(["Category_std", "disc_band"], as_index=False)["purchased_last_month"]
+            .sum()
+            .rename(columns={"purchased_last_month": "purchases"})
+        )
+
+        if guard(band_mix, "No discount band data to summarize."):
+            fig2 = px.bar(
+                band_mix,
+                x="Category_std",
+                y="purchases",
+                color="disc_band",
+                barmode="stack",
+                title="Purchases by Discount Band and Category"
+            )
+            fig2.update_layout(
+                xaxis_title="Category",
+                yaxis_title="Purchases (count)",
+                legend_title="Discount Band"
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+            st.caption(
+                "Stacked bars show how much of each category’s volume comes from different discount bands. "
+                "Tall stacks in the 21–30% or 30%+ bands signal promo dependence."
+            )
+
+            # overall discount posture callout
+            tone = "bad" if (pd.notna(cur["disc"]) and cur["disc"] >= 30) else "ok"
+            box_result(
+                "Discount Posture",
+                f"Average discount this month is {cur['disc']:.1f}%." if pd.notna(cur["disc"]) 
+                else "Average discount not available.",
+                tone
+            )
+
+    st.markdown("---")
+
+    # ==== OPERATIONS CHECKLIST ======================================
     st.subheader("Operations Checklist")
     st.write(
-        "• Check stock and shipping for the top gaining categories so they do not stock out.  \n"
-        "• Review return reasons for any category with high discounts but weak volume.  \n"
-        "• Confirm the delivery promise on product pages matches true delivery time."
+        "• Verify stock and shipping for the categories that gained the most month over month.  \n"
+        "• Review return reasons for categories with high discounts but weak volume.  \n"
+        "• Confirm that the delivery promise on PDPs matches true delivery time.  \n"
+        "• Flag any category that combines deep discounts, low ratings, and high volume for deeper review."
     )
 
-
+# ------------- TAB 4: MARKETING & CONTENT ----------------------
 # ------------- TAB 4: MARKETING & CONTENT ----------------------
 with tabs[4]:
     st.header(f"Marketing & Content Strategy — {month_focus}")
@@ -936,7 +977,7 @@ with tabs[4]:
         "which topics block conversion, and what content to ship on each platform."
     )
 
-    # Wow visual: engagement map (chart copy)
+    # ==== WOW VISUAL: ENGAGEMENT MAP ================================
     plot_df = chart_curm.dropna(subset=["product_rating"])
     if guard(plot_df, "No rating values to visualize."):
         sizes = safe_bubble_sizes(plot_df.get("purchased_last_month"))
@@ -965,10 +1006,13 @@ with tabs[4]:
         )
         st.plotly_chart(figm1, use_container_width=True)
         st.caption(
-            "Dots with high rating and many reviews are strong advocacy signals. Larger bubbles mark heavier volume."
+            "Dots to the top-right with larger bubbles are products customers love, talk about, and buy. "
+            "Those are natural candidates for social proof and creator content."
         )
 
-    # Conversion proxy (chart copy)
+    st.markdown("---")
+
+    # ==== CONVERSION PROXY: PURCHASES PER REVIEW ====================
     conv = (
         chart_curm.groupby("Category_std", as_index=False)
         .agg(
@@ -1000,10 +1044,49 @@ with tabs[4]:
             )
             st.plotly_chart(figc, use_container_width=True)
             st.caption(
-                "Higher bars mean each review converts into more purchases. These categories are strong bets for paid and organic placement."
+                "Higher bars mean each review corresponds to more purchases. "
+                "These categories are strong bets for paid traffic and organic placements."
             )
 
-    # Keyword-style view if reviews exist (raw reviews)
+    st.markdown("---")
+
+    # ==== CONTENT PRIORITY TREEMAP ==================================
+    st.subheader("Content Priority Map")
+
+    content_map = (
+        chart_curm.groupby("Category_std", as_index=False)
+        .agg(
+            purchases=("purchased_last_month", "sum"),
+            rating=("product_rating", "mean"),
+            reviews=("total_reviews", "sum")
+        )
+    )
+
+    if guard(content_map, "Not enough fields to build a content priority map."):
+        # simple score: blend normalized rating, log(reviews+1), and log(purchases+1)
+        content_map["score"] = (
+            safe_num(content_map["rating"]).fillna(0).rank(pct=True) +
+            np.log1p(safe_num(content_map["reviews"]).fillna(0)).rank(pct=True) +
+            np.log1p(safe_num(content_map["purchases"]).fillna(0)).rank(pct=True)
+        )
+
+        fig_t = px.treemap(
+            content_map,
+            path=["Category_std"],
+            values="score",
+            color="rating",
+            color_continuous_scale="Blues",
+            title="Content Priority by Category (Size = Opportunity, Color = Rating)"
+        )
+        st.plotly_chart(fig_t, use_container_width=True)
+        st.caption(
+            "Bigger tiles indicate stronger combined opportunity (rating, reviews, and purchases). "
+            "Darker tiles have higher ratings. Start content sprints with the largest, darker tiles."
+        )
+
+    st.markdown("---")
+
+    # ==== KEYWORDS FROM REVIEWS ====================================
     if reviews is not None and "review_text" in reviews.columns:
         st.subheader("Common Customer Words")
         rcur = reviews.copy()
@@ -1033,11 +1116,15 @@ with tabs[4]:
                 )
                 st.plotly_chart(figw, use_container_width=True)
                 st.caption(
-                    "These words hint at what customers care about most. Use them as topics for short videos, FAQs, and product page copy."
+                    "These words show what customers actually talk about. Turn them into video topics, FAQ bullets, "
+                    "and simple product page copy."
                 )
 
-    # Platform mix suggestion (chart copy)
+    st.markdown("---")
+
+    # ==== PLATFORM MIX + CONTENT PLAN ===============================
     st.subheader("Suggested Platform Mix by Category")
+
     plat = (
         chart_curm.groupby("Category_std", as_index=False)
         .agg(
@@ -1091,7 +1178,6 @@ with tabs[4]:
             "Stacked bars give a simple starting point for spreading effort across TikTok, IG Reels, YouTube, and paid search."
         )
 
-    # Seven-day content plan (keep calendar emojis)
     st.subheader("Seven-Day Content Plan")
     top_cats = (
         chart_curm.groupby("Category_std")["purchased_last_month"]
@@ -1115,7 +1201,7 @@ with tabs[4]:
     st.write("\n".join([f"- {row}" for row in cal]))
     st.caption("Post on TikTok and IG Reels, then reuse the strongest clips on the product page and in ads.")
 
-
+# ------------- TAB 5: PRODUCT & PRICING ------------------------
 # ------------- TAB 5: PRODUCT & PRICING ------------------------
 with tabs[5]:
     st.header(f"Product & Pricing — {month_focus}")
@@ -1124,8 +1210,10 @@ with tabs[5]:
     if not guard(curm, "No rows for this month after filters."):
         st.stop()
 
-    # Wow visual: ratings by category (chart copy)
+    # ==== WOW VISUAL: RATINGS BY CATEGORY ===========================
     if "product_rating" in chart_curm.columns and chart_curm["product_rating"].notna().any():
+        st.subheader("Rating Distribution by Category")
+
         figp1 = px.box(
             chart_curm.dropna(subset=["product_rating"]),
             x="Category_std",
@@ -1136,19 +1224,52 @@ with tabs[5]:
         figp1.update_layout(xaxis_title="", yaxis_title="Rating (★)")
         st.plotly_chart(figp1, use_container_width=True)
         st.caption(
-            "Boxes show the rating range within each category. Lower medians hint at friction or mismatched expectations."
+            "Boxes show the range of ratings within each category. Lower medians or long lower tails point to friction."
         )
+
         worst = curm.groupby("Category_std")["product_rating"].mean().sort_values().head(1)
         if not worst.empty:
             wcat, wr = worst.index[0], worst.values[0]
             level = "bad" if wr < 4.0 else "ok"
             box_result(
                 "Lowest Average Rating",
-                f"{wcat} averages {wr:.2f} stars. This is a priority category for content fixes and expectation setting.",
+                f"{wcat} averages {wr:.2f} stars. This is a priority category for expectation setting and content fixes.",
                 level
             )
 
-    # Price ladder (chart copy)
+    st.markdown("---")
+
+    # ==== VALUE MAP: RATING VS DISCOUNT =============================
+    st.subheader("Value Map — Rating vs Discount")
+
+    if {"product_rating", "discount_percentage"}.issubset(chart_curm.columns):
+        val_df = chart_curm.dropna(subset=["product_rating", "discount_percentage"]).copy()
+        if guard(val_df, "Not enough rating and discount data to build a value map."):
+            sizes = safe_bubble_sizes(val_df["purchased_last_month"])
+            fig_val = px.scatter(
+                val_df,
+                x="discount_percentage",
+                y="product_rating",
+                color="Category_std",
+                size=sizes,
+                hover_data=["product_title"],
+                title="Rating vs Discount (Bubble = Purchases)"
+            )
+            fig_val.update_layout(
+                xaxis_title="Discount %",
+                yaxis_title="Rating (★)"
+            )
+            st.plotly_chart(fig_val, use_container_width=True)
+            st.caption(
+                "Top-left (low discount, high rating) are healthy products. "
+                "Bottom-right (high discount, low rating) are at risk and usually need a content or product fix."
+            )
+
+    st.markdown("---")
+
+    # ==== PRICE LADDER ==============================================
+    st.subheader("Price Ladder by Category")
+
     if {"original_price", "discounted_price"}.issubset(chart_curm.columns):
         ladder = (
             chart_curm[["Category_std", "original_price", "discounted_price"]]
@@ -1179,11 +1300,13 @@ with tabs[5]:
             msg = (
                 "Median discounted prices sit close to list. Pricing looks healthy."
                 if heavy.empty else
-                "Some categories rely on deep discounts. Consider testing lighter promos with stronger value copy."
+                "Some categories rely on deep discounts. Test lighter promos with stronger value messaging."
             )
             box_result("Pricing Posture", msg, tone)
 
-    # Underperformers table (raw data)
+    st.markdown("---")
+
+    # ==== UNDERPERFORMERS TABLE =====================================
     under = (
         curm.assign(
             rating=curm["product_rating"],
@@ -1213,8 +1336,8 @@ with tabs[5]:
             use_container_width=True
         )
         st.write(
-            "Start with low-rating, high-volume items. Improve images, clarify sizing or features, "
-            "and use creator content to reset expectations."
+            "Start with low-rating, high-volume items. Improve imagery, clarify sizing or features, "
+            "and use creator content to reset expectations and reduce returns."
         )
 
 
@@ -1306,3 +1429,4 @@ with tabs[6]:
         )
     else:
         st.write("No actions generated for this slice. Try a different month or a wider category selection.")
+
