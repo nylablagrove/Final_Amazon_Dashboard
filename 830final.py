@@ -653,6 +653,7 @@ with tabs[1]:
 
 
 # ---------------- TAB 2: EXECUTIVE SNAPSHOT --------------------
+# ---------------- TAB 2: EXECUTIVE SNAPSHOT --------------------
 with tabs[2]:
     st.header(f"Executive Snapshot — {month_focus}")
     st.caption("📅 High level view of performance for the selected month.")
@@ -660,10 +661,13 @@ with tabs[2]:
     if not guard(curm, "No rows for this month after filters. Pick more categories or another month."):
         st.stop()
 
-    # KPI row (raw data)
+    # ==== 1. KPI STRIP (RAW DATA) ==================================
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Purchases", f"{cur['purchases']:,.0f}",
-              None if delta_purch is None else f"{delta_purch:,.0f}")
+    c1.metric(
+        "Total Purchases",
+        f"{cur['purchases']:,.0f}",
+        None if delta_purch is None else f"{delta_purch:,.0f}"
+    )
     c2.metric(
         "Average Rating",
         f"{cur['rating']:.2f}" if pd.notna(cur['rating']) else "n/a",
@@ -674,107 +678,139 @@ with tabs[2]:
         f"{cur['disc']:.1f}" if pd.notna(cur['disc']) else "n/a",
         None if delta_disc is None else f"{delta_disc:+.1f}"
     )
-    c4.metric("Total Reviews", f"{cur['reviews']:,.0f}")
+    c4.metric(
+        "Total Reviews",
+        f"{cur['reviews']:,.0f}",
+        None
+    )
 
-    # Wow visual: purchases across months (chart copy)
-    trend = (
-        chart_sales_f.groupby("month", as_index=False)["purchased_last_month"]
+    st.markdown("---")
+
+    # ==== 2. WOW VISUAL: CATEGORY TRENDS OVER TIME =================
+    st.subheader("Category Trends Over Time")
+
+    trend_cat = (
+        chart_sales_f
+        .groupby(["month", "Category_std"], as_index=False)["purchased_last_month"]
         .sum()
         .sort_values("month")
     )
-    if guard(trend, "No monthly trend to display."):
-        fig = px.line(
-            trend,
+
+    if guard(trend_cat, "No monthly trend to display for these categories."):
+        fig_cat = px.line(
+            trend_cat,
             x="month",
             y="purchased_last_month",
+            color="Category_std",
             markers=True,
-            title="Total Purchases Over Time"
+            title="Purchases by Category Across Months"
         )
-        fig.update_layout(xaxis_title="Month", yaxis_title="Purchases (count)")
-        st.plotly_chart(fig, use_container_width=True)
+        fig_cat.update_layout(
+            xaxis_title="Month",
+            yaxis_title="Purchases (count)"
+        )
+        st.plotly_chart(fig_cat, use_container_width=True)
         st.caption(
-            "This line shows how total purchases move over time across the selected categories."
+            "Each line is a category. This lets an executive see which categories are gaining or fading over time, "
+            "not just the total line."
         )
 
-    # Simple narrative on month over month move (raw)
+    # ==== 3. QUICK MoM NARRATIVE ===================================
     if delta_purch is None:
         box_result(
             "Baseline Month",
             f"In {month_focus}, the selected categories recorded {cur['purchases']:,.0f} purchases. "
-            "This acts as the starting point for future comparisons.",
-            level="info"
+            "This is the starting point for future comparisons.",
+            level="info",
+            title="Baseline"
         )
     elif delta_purch > 0:
         box_result(
             "Month-over-Month Growth",
-            f"Purchases grew by {delta_purch:,.0f} versus {prev_month}. "
-            "Protect the categories that drove this lift and reuse what worked on product pages.",
+            f"Purchases grew by {delta_purch:,.0f} compared to {prev_month}. "
+            "Protect the categories that drove this lift and repeat what worked on their product pages.",
             "good"
         )
     else:
         box_result(
             "Purchases Decreased",
-            f"Purchases fell by {abs(delta_purch):,.0f} versus {prev_month}. "
-            "Dig into category changes and page quality to understand where volume slipped.",
+            f"Purchases fell by {abs(delta_purch):,.0f} compared to {prev_month}. "
+            "Focus on the categories that lost the most volume and check pricing, images, and returns.",
             "bad"
         )
 
-    # Top categories for the focus month (chart copy)
+    st.markdown("---")
+
+    # ==== 4. CATEGORY MIX: TREEMAP (REPLACES TOP-12 BAR) ===========
+    st.subheader(f"Where This Month’s Purchases Come From")
+
     mix = (
-        chart_curm.groupby("Category_std", as_index=False)["purchased_last_month"]
+        chart_curm
+        .groupby("Category_std", as_index=False)["purchased_last_month"]
         .sum()
-        .sort_values("purchased_last_month", ascending=False)
-        .head(12)
+        .rename(columns={"purchased_last_month": "purchases"})
     )
+
     if guard(mix, "No category contribution to display."):
-        fig2 = px.bar(
+        fig_tree = px.treemap(
             mix,
-            x="Category_std",
-            y="purchased_last_month",
-            text_auto=".2s",
-            title=f"Top 12 Categories in {month_focus}"
+            path=["Category_std"],
+            values="purchases",
+            title=f"Category Share of Purchases — {month_focus}"
         )
-        fig2.update_layout(xaxis_title="Category", yaxis_title="Purchases")
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig_tree, use_container_width=True)
         st.caption(
-            "Bars rank the leading categories by purchases for the selected month."
+            "Each rectangle is a category. Bigger areas mean more purchases this month. "
+            "Executives can see the mix at a glance."
         )
-        top_cat = mix.iloc[0]
+
+        top_cat = mix.sort_values("purchases", ascending=False).iloc[0]
         box_result(
             "Leader Category",
-            f"{top_cat['Category_std']} is the top category this month. "
-            "Keep inventory tight and keep the product pages simple and visual.",
+            f"{top_cat['Category_std']} is the largest slice of demand this month. "
+            "Keep this category well stocked and featured.",
             "good"
         )
 
-    # Month over month change by category (chart copy)
+    st.markdown("---")
+
+    # ==== 5. BIGGEST CATEGORY SHIFTS (MoM BAR) =====================
+    st.subheader("Biggest Month-over-Month Shifts")
+
     g = (
-        chart_sales_f.groupby(["month", "Category_std"])["purchased_last_month"]
+        chart_sales_f
+        .groupby(["month", "Category_std"])["purchased_last_month"]
         .sum()
         .reset_index()
     )
+
     if guard(g, "No data for month-over-month category change."):
         last_two = g[g["month"].isin([prev_month, month_focus])]
         if guard(last_two, "Not enough months to compare."):
-            pivot = last_two.pivot(
-                index="Category_std",
-                columns="month",
-                values="purchased_last_month"
-            ).fillna(0)
+            pivot = (
+                last_two
+                .pivot(index="Category_std", columns="month", values="purchased_last_month")
+                .fillna(0)
+            )
             if prev_month in pivot.columns and month_focus in pivot.columns:
                 pivot["delta"] = pivot[month_focus] - pivot[prev_month]
                 ranked = pivot.sort_values("delta", ascending=False).reset_index()
-                fig3 = px.bar(
+
+                fig_delta = px.bar(
                     ranked,
                     x="Category_std",
                     y="delta",
                     text_auto=".2s",
-                    title=f"Month-over-Month Change by Category ({prev_month} → {month_focus})"
+                    title=f"Change in Purchases by Category ({prev_month} → {month_focus})"
                 )
-                fig3.update_layout(xaxis_title="Category", yaxis_title="Δ Purchases")
-                st.plotly_chart(fig3, use_container_width=True)
+                fig_delta.update_layout(
+                    xaxis_title="Category",
+                    yaxis_title="Δ Purchases"
+                )
+                st.plotly_chart(fig_delta, use_container_width=True)
                 st.caption(
-                    "Bars show which categories gained or lost the most purchases compared to last month."
+                    "Positive bars are categories that gained since last month. "
+                    "Negative bars are the ones that slipped."
                 )
 
                 winner = ranked.iloc[0]
@@ -784,20 +820,35 @@ with tabs[2]:
                     f"**Biggest drop:** {loser['Category_std']} ({abs(loser['delta']):,.0f} down)."
                 )
 
-    # Next month plan as a clearer section
+    st.markdown("---")
+
+    # ==== 6. NEXT MONTH PLAN — MORE VISIBLE ========================
     st.subheader("Next Month Plan")
+
     recs = []
-    if delta_purch and delta_purch < 0:
-        recs.append("Finance: test lighter discounts + bundles instead of leaning on deep cuts.")
+
+    if delta_purch is not None and delta_purch < 0:
+        recs.append(
+            "Finance & Ops: test bundles and lighter discounts instead of relying on deep cuts in categories that dropped."
+        )
     if pd.notna(cur["rating"]) and cur["rating"] < 4.0:
-        recs.append("Marketing: add 20–30 second demos and highlight verified reviews on weaker categories.")
+        recs.append(
+            "Marketing & Product: add 20–30 second demos and highlight verified reviews for lower-rated categories."
+        )
     if pd.notna(cur["disc"]) and cur["disc"] > 25:
-        recs.append("Product: rewrite above-the-fold bullets so pages sell value before promos.")
+        recs.append(
+            "Finance & Product: tighten discount bands and improve above-the-fold value bullets on the PDP."
+        )
     if not recs:
-        recs.append("Keep scaling creator content and keep PDP copy short, visual, and specific.")
+        recs.append(
+            "All teams: keep scaling creator content on top categories and keep PDP copy short, visual, and specific."
+        )
 
-    st.write("- " + "\n- ".join(recs))
-
+    box_result(
+        "Agreed Actions For Next Month",
+        "• " + "\n• ".join(recs),
+        "ok"
+    )
 
 # ---------------- TAB 3: FINANCE & OPS -------------------------
 with tabs[3]:
