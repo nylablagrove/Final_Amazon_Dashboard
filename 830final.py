@@ -376,6 +376,9 @@ delta_rating = None if pd.isna(pre["rating"]) else cur["rating"] - pre["rating"]
 delta_disc   = None if pd.isna(pre["disc"]) else cur["disc"] - pre["disc"]
 
 # create tabs for each audience to keep the story clean and focused
+# ------------------------------------------------------------
+# TABS LAYOUT
+# ------------------------------------------------------------
 tabs = st.tabs([
     "How To Use",
     "Imputation & Modeling",
@@ -386,60 +389,64 @@ tabs = st.tabs([
     "Plans & Accountability",
 ])
 
-# --------------- TAB 0: HOW TO USE -----------------
+# ---------------------- TAB 0: HOW TO USE ----------------------
 with tabs[0]:
     st.subheader("Welcome")
     st.write(
         "This hub helps executives and teams understand performance without reading code. "
         "Use the left sidebar to pick a month and narrow to a few categories. "
-        "Each tab shows clear visuals with short captions in plain language. "
-        "Green, yellow, and red callouts are reserved for key results only."
+        "Each tab shows clear visuals and short text that explains what the chart means. "
+        "Green, yellow, and red result boxes call out what is going well or needs attention."
     )
 
     st.subheader("Project Goal")
     st.write(
-        "The goal is a shared snapshot that combines sales activity, ratings, and review signals. "
-        "Executives get a one-page story for the month. Teams get deeper views with the why behind the numbers "
-        "and a concrete plan. This format is reusable because it avoids jargon and uses plain language."
+        "The goal is to give a repeatable, plain-language view of performance for Amazon-style product sales. "
+        "Executives get a fast summary. Teams get more detailed views by topic like finance, marketing, and product. "
+        "The same pattern can be reused for other companies without changing the logic too much."
     )
 
     st.subheader("What This App Does")
     st.write(
-        "• Merges product-level activity by month with quality signals like ratings and review volume.  \n"
-        "• Highlights where volume concentrates and how discounts are used.  \n"
-        "• Uses a simple regression to understand what most relates to purchases.  \n"
-        "• Converts findings into a short action list with owners and due dates."
+        "• Combines product-level purchases with ratings, reviews, and discount information.  \n"
+        "• Shows where volume concentrates and how discounts are used by category.  \n"
+        "• Uses review language to suggest future content and customer education.  \n"
+        "• Turns insights into a simple action list with owners and due dates.  \n"
+        "• Adds an imputation and modeling tab so the data science work is visible, not hidden."
     )
 
-    st.subheader("Why I Chose This Project")
+    st.subheader("Key Terms (Plain Language)")
     st.write(
-        "I want to work on the business side where communication matters. "
-        "Many dashboards show numbers but do not tell people what to do next. "
-        "This app forces a full data science workflow from cleaning to explanation to action, "
-        "and it teaches non-technical teammates how to use data without reading code."
+        "**Purchases** – Count of units bought in the selected month.  \n"
+        "**Discount %** – Average percent off the original list price.  \n"
+        "**Rating (★)** – Average product star rating from reviews.  \n"
+        "**Total Reviews** – How many reviews a product or category has.  \n"
+        "**Imputation** – A simple way to fill missing numbers (for charts only) so shapes look stable.  \n"
+        "**Regression model** – A basic model that estimates how strongly each driver (rating, discount, reviews) "
+        "relates to purchases when they move together."
     )
 
-    st.subheader("Datasets Used")
+    st.subheader("Datasets")
     ds_rows = []
     ds_rows.append([
         "amazon_sales_with_two_months.csv",
         len(sales),
         "Required",
-        "Sales by product and category with month, rating, reviews, and discount fields."
+        "Sales by product and category with month, rating, review counts, and discount fields."
     ])
     if reviews is not None:
         ds_rows.append([
             "amazon_reviews.csv",
             len(reviews),
             "Optional",
-            "Text reviews, ratings, and sentiment used for keywords and content planning."
+            "Text reviews, ratings, and sentiment for keyword and content ideas."
         ])
     else:
         ds_rows.append([
             "amazon_reviews.csv",
             0,
             "Optional",
-            "Not loaded. Add to enable keyword insights and content briefs."
+            "Not loaded. Add this file to unlock keyword and sentiment views."
         ])
     if catalog is not None:
         ds_rows.append([
@@ -455,7 +462,10 @@ with tabs[0]:
             "Optional",
             "Not loaded."
         ])
-    st.dataframe(pd.DataFrame(ds_rows, columns=["File", "Rows", "Role", "What It Adds"]), use_container_width=True)
+    st.dataframe(
+        pd.DataFrame(ds_rows, columns=["File", "Rows", "Role", "What It Adds"]),
+        use_container_width=True
+    )
 
     st.subheader("Data Quality At A Glance")
     def null_table(df, name):
@@ -478,180 +488,182 @@ with tabs[0]:
     else:
         st.dataframe(dq, use_container_width=True)
 
-    st.markdown(
-        "_Missing values are left raw for KPIs so we do not hide problems. "
-        "For charts only, you can optionally see the effect of a simple median-by-category imputation in the next tab._"
-    )
-
-    st.subheader("Key Terms (Plain English)")
+    st.subheader("How Missing Values Are Handled")
     st.write(
-        "**KPI (Key Performance Indicator)**: A metric that tells you quickly if things are going well or not.  \n"
-        "**MoM (Month over Month)**: Comparing this month to the previous month.  \n"
-        "**Imputation**: A simple way to fill missing values, for example using the median for that category.  \n"
-        "**Regression (Linear Regression)**: A basic model that estimates how much each driver (rating, discount, reviews) "
-        "relates to purchases when they move together.  \n"
-        "**Conversion**: Roughly how well interest turns into purchases. Here we approximate it with purchases per review."
+        "• Core KPIs (totals, averages, and action rules) use the raw data with missing values left as they are.  \n"
+        "• For charts only, you can turn on a simple median-by-category imputation using the sidebar toggle.  \n"
+        "• The Imputation & Modeling tab shows a direct before-and-after comparison using the real data."
     )
 
-    st.subheader("How To Move Through The Dashboard")
+    st.subheader("How To Use This Dashboard")
     st.write(
-        "1. **Imputation & Modeling**: See how missing data is handled for charts and what the regression model says.  \n"
-        "2. **Executive Snapshot**: Get KPIs, a treemap overview, and category gains or losses.  \n"
-        "3. **Finance & Ops**: Check discount posture and volume drivers.  \n"
-        "4. **Marketing & Content Strategy**: See engagement patterns, conversion proxy, and content ideas.  \n"
-        "5. **Product & Pricing**: Look at ratings, price ladders, and underperformers.  \n"
-        "6. **Plans & Accountability**: Download the cross-team action list."
+        "1. Start with **Executive Snapshot** to see the key metrics and top categories for the selected month.  \n"
+        "2. Open **Finance & Ops**, **Marketing**, and **Product & Pricing** to see deeper views for each team.  \n"
+        "3. Use **Imputation & Modeling** if you want to understand the data science steps behind the charts.  \n"
+        "4. Finish with **Plans & Accountability** and download the CSV so owners have clear next steps."
     )
 
-    box_warn(
-        "Filter Reminder",
-        "If you filter down to very few categories, some charts may be empty. Widen the selection if you see a notice about missing data."
+    st.write(
+        "_If a chart is empty, widen the category selection or pick another month to get a fuller picture._"
     )
 
 
-# --------------- TAB 1: IMPUTATION & MODELING -----------------
+# ------------- TAB 1: IMPUTATION & MODELING --------------------
 with tabs[1]:
     st.header("Imputation & Modeling")
-    st.caption("🧮 How missing values are handled for charts and what the regression model says about purchases.")
+    st.caption("🧮 How missing values are filled for charts and what the regression model says about purchases.")
 
-    st.subheader("Imputation Approach (Charts Only)")
-    st.write(
-        "For core KPIs we keep the data raw. We do not fill missing values when computing total purchases or average rating.  \n"
-        "For charts only, we support a median-by-category imputation. This means:  \n"
-        "• For each numeric column, missing values are filled with the median of that category.  \n"
-        "• If a category has all missing values for a column, we fall back to the overall median.  \n"
-        "This keeps shapes of charts stable without inventing extreme values."
-    )
-
-    # small interactive comparison: raw vs imputed median discount by category
-    st.subheader("Example: Raw vs Imputed Discount by Category")
-    example_choice = st.radio(
-        "View",
-        ["Raw medians (no imputation)", "Imputed medians (median by category)"],
-        index=0,
+    view = st.radio(
+        "Choose a view",
+        ["Imputation", "Modeling"],
         horizontal=True
     )
 
-    # base frame for example (current month)
-    base_raw = curm.copy()
-    base_imp = chart_curm.copy()
+    # ---------- IMPUTATION VIEW ----------
+    if view == "Imputation":
+        st.subheader("Imputation Approach (Charts Only)")
+        st.write(
+            "I used a simple median-based strategy so that charts stay stable when some numeric values are missing.  \n"
+            "This does not change the raw KPIs or the action logic. It only affects copies of the data that feed charts."
+        )
+        st.write(
+            "**Steps:**  \n"
+            "1. Group rows by `Category_std`.  \n"
+            "2. For each numeric column, fill missing values with the median within that category.  \n"
+            "3. If an entire category is missing for a column, fill with the overall median for that column.  \n"
+            "4. Use these imputed copies only for visualizations like box plots and scatter plots."
+        )
 
-    if not guard(base_raw, "No rows available for this month to illustrate imputation. Try another month or more categories."):
-        pass
+        st.subheader("Example: Raw vs Imputed Median Discount by Category")
+        raw = curm.copy()
+        imp = impute_by_category(curm)
+
+        if guard(raw, "No rows available for this month to illustrate imputation. Try another month or more categories."):
+            raw_med = (
+                raw[["Category_std", "discount_percentage"]]
+                .dropna()
+                .groupby("Category_std")["discount_percentage"]
+                .median()
+                .reset_index()
+                .rename(columns={"discount_percentage": "Raw median discount %"})
+            )
+
+            imp_med = (
+                imp[["Category_std", "discount_percentage"]]
+                .dropna()
+                .groupby("Category_std")["discount_percentage"]
+                .median()
+                .reset_index()
+                .rename(columns={"discount_percentage": "Imputed median discount %"})
+            )
+
+            merged = pd.merge(raw_med, imp_med, on="Category_std", how="inner")
+            if guard(merged, "No overlap in categories to compare raw and imputed medians."):
+                long = merged.melt(
+                    id_vars="Category_std",
+                    value_vars=["Raw median discount %", "Imputed median discount %"],
+                    var_name="Version",
+                    value_name="Median discount %"
+                )
+                fig_imp = px.bar(
+                    long.sort_values("Median discount %", ascending=False).head(30),
+                    x="Category_std",
+                    y="Median discount %",
+                    color="Version",
+                    barmode="group",
+                    title="Raw vs Imputed Median Discount % (Current Month)"
+                )
+                fig_imp.update_layout(
+                    xaxis_title="Category",
+                    yaxis_title="Median discount %",
+                )
+                st.plotly_chart(fig_imp, use_container_width=True)
+                st.caption(
+                    "This comparison shows how much the median discount for each category shifts "
+                    "once missing values are filled using medians."
+                )
+
+        st.write(
+            "_Imputation is only used for visual stability. The KPIs and action rules still rely on the raw data._"
+        )
+
+    # ---------- MODELING VIEW ----------
     else:
-        if example_choice.startswith("Raw"):
-            ex = (base_raw[["Category_std", "discount_percentage"]]
-                  .dropna()
-                  .groupby("Category_std")["discount_percentage"]
-                  .median()
-                  .reset_index())
-            ex_title = "Raw Median Discount % by Category (Current Month)"
-            ex_caption = "_Each bar shows the median discount without filling missing values._"
+        st.subheader("Why Use Linear Regression Here?")
+        st.write(
+            "Beyond descriptive charts, I wanted one simple model that ranks which levers relate most to purchases. "
+            "I used a linear regression on standardized variables so coefficients can be compared directly."
+        )
+        st.write(
+            "**Model setup:**  \n"
+            "• Response: `purchased_last_month` (standardized).  \n"
+            "• Predictors: product rating, discount percentage, and total reviews.  \n"
+            "• Only rows with complete values for these fields are used.  \n"
+            "• All predictors are standardized before fitting so the β values are on the same scale."
+        )
+
+        coef_df, reg_data, reg_cols = simple_regression_purchases(sales_f)
+
+        if coef_df is None or coef_df.empty:
+            st.write(
+                "There are not enough complete rows across the current category selection to fit the model. "
+                "Try widening the category filters or using a different month."
+            )
         else:
-            ex = (base_imp[["Category_std", "discount_percentage"]]
-                  .dropna()
-                  .groupby("Category_std")["discount_percentage"]
-                  .median()
-                  .reset_index())
-            ex_title = "Imputed Median Discount % by Category (Current Month)"
-            ex_caption = (
-                "_Each bar shows the median discount after filling missing numeric values "
-                "within each category using the median._"
+            st.subheader("Standardized Effects (β)")
+            st.dataframe(
+                coef_df[["Driver", "Standardized Effect (β)"]]
+                .style.format({"Standardized Effect (β)": "{:.2f}"}),
+                use_container_width=True
+            )
+            st.caption(
+                "Larger absolute β values mean that driver moves more with purchases after controlling "
+                "for the other fields in the model."
             )
 
-        if guard(ex, "No discount data to show."):
-            fig_ex = px.bar(
-                ex.sort_values("discount_percentage", ascending=False).head(15),
-                x="Category_std",
-                y="discount_percentage",
-                text_auto=".1f",
-                title=ex_title
+            best = coef_df.iloc[0]
+            driver_col = best["column"]
+            driver_label = best["Driver"]
+
+            reg_slice = sales_f.loc[reg_data.index].copy()
+            if "Category_std" not in reg_slice.columns:
+                reg_slice["Category_std"] = "All"
+
+            fig_reg = px.scatter(
+                reg_slice,
+                x=driver_col,
+                y="purchased_last_month",
+                color="Category_std",
+                opacity=0.7,
+                title=f"Purchases vs {driver_label} (All Months, Filtered Categories)"
             )
-            fig_ex.update_layout(xaxis_title="Category", yaxis_title="Median Discount %")
-            st.plotly_chart(fig_ex, use_container_width=True)
-            st.markdown(ex_caption)
+            fig_reg.update_layout(xaxis_title=driver_label, yaxis_title="Purchases (count)")
+            st.plotly_chart(fig_reg, use_container_width=True)
+            st.caption(
+                "Each dot is a product in the filtered slice. The slope of the cloud plus the β table above "
+                "support the same story about which driver is most important."
+            )
 
-    st.markdown(
-        "_Note: Turning on or off imputation only affects charts. KPI tiles and action rules always use raw data._"
-    )
-
-    st.subheader("Simple Linear Regression: What Drives Purchases?")
-    st.write(
-        "To move beyond descriptive charts, I fit a simple linear regression model using only the core sales file.  \n"
-        "The goal is not a perfect prediction engine. The goal is to rank basic drivers: rating, discount percentage, "
-        "and review volume, and see which one most strongly relates to purchases when they move together."
-    )
-
-    coef_df, reg_data, reg_cols = simple_regression_purchases(sales_f)
-
-    if coef_df is None or coef_df.empty:
-        box_info(
-            "Model Not Available",
-            "There are not enough complete rows across these filtered categories to fit a stable regression. "
-            "Widen the category filters or use more data to see driver insights."
-        )
-    else:
-        st.markdown("#### Driver Strengths (Standardized Effects)")
-        coef_show = coef_df[["Driver", "Standardized Effect (β)", "|β|"]].copy()
-        st.dataframe(
-            coef_show.style.format({"Standardized Effect (β)": "{:.2f}", "|β|": "{:.2f}"}),
-            use_container_width=True
-        )
-
-        # wow visualization for the model: bar chart of standardized coefficients
-        fig_coef = px.bar(
-            coef_df,
-            x="Driver",
-            y="Standardized Effect (β)",
-            text_auto=".2f",
-            title="Standardized Effect of Each Driver on Purchases"
-        )
-        fig_coef.update_layout(xaxis_title="Driver", yaxis_title="Standardized Effect (β)")
-        st.plotly_chart(fig_coef, use_container_width=True)
-        st.markdown(
-            "_Bars above zero mean higher values of that driver tend to pair with more purchases in this slice. "
-            "Bars below zero mean the opposite._"
-        )
-
-        best = coef_df.iloc[0]
-        st.markdown(
-            f"**Key takeaway:** In this filtered view, **{best['Driver']}** has the strongest modeled link with purchases. "
-            "That means moves that improve this driver should usually come before deeper discounts."
-        )
-
-        # scatter for strongest driver vs purchases
-        driver_col = best["column"]
-        driver_label = best["Driver"]
-        reg_slice = sales_f.loc[reg_data.index].copy()
-        if "Category_std" not in reg_slice.columns:
-            reg_slice["Category_std"] = "All"
-
-        fig_reg = px.scatter(
-            reg_slice,
-            x=driver_col,
-            y="purchased_last_month",
-            color="Category_std",
-            opacity=0.7,
-            title=f"Purchases vs {driver_label} (All Months, Filtered Categories)"
-        )
-        fig_reg.update_layout(xaxis_title=driver_label, yaxis_title="Purchases (count)")
-        st.plotly_chart(fig_reg, use_container_width=True)
-        st.markdown(
-            "_The scatter plot shows the raw relationship between the strongest driver and purchases for the filtered categories._"
-        )
+            desc = (
+                f"{best['Driver']} has the strongest modeled link with purchases after controlling for "
+                "discounts and review volume. Moves that improve this driver should be tested before "
+                "deeper discounts."
+            )
+            box_result("Model Insight", desc, level="ok", title="Model Insight")
 
 
-# --------------- TAB 2: EXECUTIVE SNAPSHOT -----------------
+# ---------------- TAB 2: EXECUTIVE SNAPSHOT --------------------
 with tabs[2]:
     st.header(f"Executive Snapshot — {month_focus}")
-    st.caption("📅 High-level KPIs, a visual overview of the month, and what to do next.")
+    st.caption("📅 High level view of performance for the selected month.")
 
     if not guard(curm, "No rows for this month after filters. Pick more categories or another month."):
         st.stop()
 
-    # KPI row (kept as the “stock-like” look)
+    # KPI row (raw data)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Purchases", f"{cur['purchases']:,.0f}", None if delta_purch is None else f"{delta_purch:,.0f}")
+    c1.metric("Total Purchases", f"{cur['purchases']:,.0f}",
+              None if delta_purch is None else f"{delta_purch:,.0f}")
     c2.metric(
         "Average Rating",
         f"{cur['rating']:.2f}" if pd.notna(cur['rating']) else "n/a",
@@ -664,63 +676,50 @@ with tabs[2]:
     )
     c4.metric("Total Reviews", f"{cur['reviews']:,.0f}")
 
-    # hero visualization: treemap of purchases by category
-    st.subheader("Where Purchases Concentrate")
-    treemap = (
-        curm.groupby("Category_std", as_index=False)["purchased_last_month"]
+    # Wow visual: purchases across months (chart copy)
+    trend = (
+        chart_sales_f.groupby("month", as_index=False)["purchased_last_month"]
         .sum()
-        .sort_values("purchased_last_month", ascending=False)
+        .sort_values("month")
     )
-    if guard(treemap, "No category data for this month."):
-        fig_t = px.treemap(
-            treemap,
-            path=["Category_std"],
-            values="purchased_last_month",
-            title=f"Purchase Mix by Category — {month_focus}"
-        )
-        st.plotly_chart(fig_t, use_container_width=True)
-        st.markdown(
-            "_The treemap shows which categories carry the most volume this month. Larger boxes mean more purchases._"
-        )
-
-    # monthly trend line (chart copy)
-    st.subheader("Trend Across Months")
-    trend = (chart_sales_f.groupby("month", as_index=False)["purchased_last_month"]
-             .sum()
-             .sort_values("month"))
     if guard(trend, "No monthly trend to display."):
-        fig = px.line(trend, x="month", y="purchased_last_month", markers=True,
-                      title="Total Purchases Across Months")
+        fig = px.line(
+            trend,
+            x="month",
+            y="purchased_last_month",
+            markers=True,
+            title="Total Purchases Over Time"
+        )
         fig.update_layout(xaxis_title="Month", yaxis_title="Purchases (count)")
         st.plotly_chart(fig, use_container_width=True)
-        st.markdown(
-            "_This line shows whether the selected categories are growing, flat, or slipping over time._"
+        st.caption(
+            "This line shows how total purchases move over time across the selected categories."
         )
 
-    # narrative for total purchases movement
+    # Simple narrative on month over month move (raw)
     if delta_purch is None:
-        box_info(
+        box_result(
             "Baseline Month",
             f"In {month_focus}, the selected categories recorded {cur['purchases']:,.0f} purchases. "
-            "Use the category and change charts below to see where this volume comes from."
+            "This acts as the starting point for future comparisons.",
+            level="info"
         )
     elif delta_purch > 0:
         box_result(
             "Month-over-Month Growth",
             f"Purchases grew by {delta_purch:,.0f} versus {prev_month}. "
-            "The lift likely came from category mix and clearer product pages.",
+            "Protect the categories that drove this lift and reuse what worked on product pages.",
             "good"
         )
     else:
         box_result(
             "Purchases Decreased",
             f"Purchases fell by {abs(delta_purch):,.0f} versus {prev_month}. "
-            "Check category mix and lean on clarity and social proof before deeper discounts.",
+            "Dig into category changes and page quality to understand where volume slipped.",
             "bad"
         )
 
-    # category bar chart (chart copy)
-    st.subheader("Top Categories This Month")
+    # Top categories for the focus month (chart copy)
     mix = (
         chart_curm.groupby("Category_std", as_index=False)["purchased_last_month"]
         .sum()
@@ -728,76 +727,93 @@ with tabs[2]:
         .head(12)
     )
     if guard(mix, "No category contribution to display."):
-        fig2 = px.bar(mix, x="Category_std", y="purchased_last_month", text_auto=".2s",
-                      title=f"Top 12 Categories in {month_focus}")
+        fig2 = px.bar(
+            mix,
+            x="Category_std",
+            y="purchased_last_month",
+            text_auto=".2s",
+            title=f"Top 12 Categories in {month_focus}"
+        )
         fig2.update_layout(xaxis_title="Category", yaxis_title="Purchases")
         st.plotly_chart(fig2, use_container_width=True)
-        st.markdown(
-            "_Bars rank categories by total purchases. This is the quick list of leaders to protect and mid-pack to develop._"
+        st.caption(
+            "Bars rank the leading categories by purchases for the selected month."
         )
         top_cat = mix.iloc[0]
         box_result(
             "Leader Category",
-            f"{top_cat['Category_std']} leads this month. Protect the lead with strong visuals and clear benefits.",
+            f"{top_cat['Category_std']} is the top category this month. "
+            "Keep inventory tight and keep the product pages simple and visual.",
             "good"
         )
 
-    # month-over-month change by category (chart copy)
-    st.subheader("Biggest Month-over-Month Movers")
-    g = (chart_sales_f.groupby(["month", "Category_std"])["purchased_last_month"].sum().reset_index())
+    # Month over month change by category (chart copy)
+    g = (
+        chart_sales_f.groupby(["month", "Category_std"])["purchased_last_month"]
+        .sum()
+        .reset_index()
+    )
     if guard(g, "No data for month-over-month category change."):
         last_two = g[g["month"].isin([prev_month, month_focus])]
         if guard(last_two, "Not enough months to compare."):
-            pivot = last_two.pivot(index="Category_std", columns="month", values="purchased_last_month").fillna(0)
+            pivot = last_two.pivot(
+                index="Category_std",
+                columns="month",
+                values="purchased_last_month"
+            ).fillna(0)
             if prev_month in pivot.columns and month_focus in pivot.columns:
                 pivot["delta"] = pivot[month_focus] - pivot[prev_month]
                 ranked = pivot.sort_values("delta", ascending=False).reset_index()
-                fig3 = px.bar(ranked, x="Category_std", y="delta", text_auto=".2s",
-                              title=f"Change in Purchases ({prev_month} → {month_focus})")
+                fig3 = px.bar(
+                    ranked,
+                    x="Category_std",
+                    y="delta",
+                    text_auto=".2s",
+                    title=f"Month-over-Month Change by Category ({prev_month} → {month_focus})"
+                )
                 fig3.update_layout(xaxis_title="Category", yaxis_title="Δ Purchases")
                 st.plotly_chart(fig3, use_container_width=True)
-                st.markdown(
-                    "_Bars above zero show categories that grew. Bars below zero show categories that lost ground._"
+                st.caption(
+                    "Bars show which categories gained or lost the most purchases compared to last month."
                 )
+
                 winner = ranked.iloc[0]
                 loser = ranked.iloc[-1]
-                st.markdown(
-                    f"**Quick read:** Biggest gain: **{winner['Category_std']}** (+{winner['delta']:,.0f}).  "
-                    f"Biggest drop: **{loser['Category_std']}** ({abs(loser['delta']):,.0f} down)."
+                st.write(
+                    f"**Biggest gain:** {winner['Category_std']} (+{winner['delta']:,.0f}).  \n"
+                    f"**Biggest drop:** {loser['Category_std']} ({abs(loser['delta']):,.0f} down)."
                 )
 
-    # short next month plan
-    st.subheader("Next Month Plan (High Level)")
+    # Next month plan as a clearer section
+    st.subheader("Next Month Plan")
     recs = []
     if delta_purch and delta_purch < 0:
-        recs.append("Finance: test lighter discounts with bundles instead of deeper blanket promos.")
+        recs.append("Finance: test lighter discounts + bundles instead of leaning on deep cuts.")
     if pd.notna(cur["rating"]) and cur["rating"] < 4.0:
-        recs.append("Marketing: add short demo videos and highlight verified reviews at the top of product pages.")
+        recs.append("Marketing: add 20–30 second demos and highlight verified reviews on weaker categories.")
     if pd.notna(cur["disc"]) and cur["disc"] > 25:
-        recs.append("Product: strengthen value bullets so pages convert at lighter promo levels.")
+        recs.append("Product: rewrite above-the-fold bullets so pages sell value before promos.")
     if not recs:
-        recs.append("Scale creator content around top categories and keep PDP copy short, visual, and specific.")
+        recs.append("Keep scaling creator content and keep PDP copy short, visual, and specific.")
 
-    st.markdown("- " + "\n- ".join(recs))
-    st.markdown(
-        "_For more detail on why purchases move, see the **Imputation & Modeling** tab and the team-specific tabs._"
-    )
+    st.write("- " + "\n- ".join(recs))
 
 
-# --------------- TAB 3: FINANCE & OPS -----------------
+# ---------------- TAB 3: FINANCE & OPS -------------------------
 with tabs[3]:
     st.header(f"Finance & Operations — {month_focus}")
-    st.caption("📊 How volume and discounts interact, plus quick operational checks.")
+    st.caption("📊 How volume, discounts, and operations connect for this month.")
 
     if not guard(curm, "No rows for this month after filters."):
         st.stop()
 
-    # hero visualization: purchases vs discount scatter
-    st.subheader("Are We Buying Volume With Discounts?")
+    # Wow visual: purchases vs average discount (chart copy)
     by_cat = (
         chart_curm.groupby("Category_std", as_index=False)
-        .agg(purchases=("purchased_last_month", "sum"),
-             avg_disc=("discount_percentage", "mean"))
+        .agg(
+            purchases=("purchased_last_month", "sum"),
+            avg_disc=("discount_percentage", "mean")
+        )
     )
     if guard(by_cat, "No category statistics available."):
         fig1 = px.scatter(
@@ -807,10 +823,13 @@ with tabs[3]:
             color="Category_std",
             title="Purchases vs Average Discount by Category"
         )
-        fig1.update_layout(xaxis_title="Average Discount %", yaxis_title="Purchases (count)")
+        fig1.update_layout(
+            xaxis_title="Average Discount %",
+            yaxis_title="Purchases (count)"
+        )
         st.plotly_chart(fig1, use_container_width=True)
-        st.markdown(
-            "_Each point is a category. If most high-volume points sit far to the right, volume may depend on deep discounts._"
+        st.caption(
+            "Each dot is a category. Higher points show more volume, farther right shows heavier discounting."
         )
 
         lead = by_cat.sort_values("purchases", ascending=False).head(1)
@@ -823,7 +842,7 @@ with tabs[3]:
                 level
             )
 
-    st.subheader("Discount Distribution by Category")
+    # Discount distribution (chart copy)
     if "discount_percentage" in chart_curm.columns and chart_curm["discount_percentage"].notna().any():
         fig2 = px.box(
             chart_curm.dropna(subset=["discount_percentage"]),
@@ -834,43 +853,39 @@ with tabs[3]:
         )
         fig2.update_layout(xaxis_title="", yaxis_title="Discount %")
         st.plotly_chart(fig2, use_container_width=True)
-        st.markdown(
-            "_Boxes show the spread and typical discount level by category. Taller boxes or very high medians hint at promo dependence._"
+        st.caption(
+            "Boxes show how discount levels spread within each category. High medians or long upper tails signal promo dependence."
         )
-
         tone = "bad" if (pd.notna(cur["disc"]) and cur["disc"] >= 30) else "ok"
         box_result(
             "Discount Posture",
-            f"Average discount across selected categories is {cur['disc']:.1f}%. "
-            "Use the deepest discounts only for low-rating or overstock items.",
+            f"Average discount this month is {cur['disc']:.1f}%." if pd.notna(cur["disc"]) else "Average discount not available.",
             tone
         )
 
     st.subheader("Operations Checklist")
-    ops = [
-        "Check stock and shipping for the top three categories with the largest purchase increases.",
-        "Review return reasons for any category that increased discounts without a visible volume lift.",
-        "Confirm that delivery promises on product pages match actual average delivery times."
-    ]
-    st.markdown("- " + "\n- ".join(ops))
+    st.write(
+        "• Check stock and shipping for the top gaining categories so they do not stock out.  \n"
+        "• Review return reasons for any category with high discounts but weak volume.  \n"
+        "• Confirm the delivery promise on product pages matches true delivery time."
+    )
 
 
-# --------------- TAB 4: MARKETING & CONTENT STRATEGY -----------------
+# ------------- TAB 4: MARKETING & CONTENT ----------------------
 with tabs[4]:
     st.header(f"Marketing & Content Strategy — {month_focus}")
-    st.caption("🎬 How people react to products and what content to publish.")
+    st.caption("🎬 How ratings, reviews, and content support conversion.")
 
     if not guard(curm, "No rows for this month after filters."):
         st.stop()
 
-    box_info(
-        "Focus For This Month",
-        "Identify categories that convince people without heavy discounts, see which topics block conversion, "
-        "and turn review language into content ideas."
+    st.subheader("Focus For This Month")
+    st.write(
+        "The goal is to see which categories convince people without heavy discounts, "
+        "which topics block conversion, and what content to ship on each platform."
     )
 
-    # hero visualization: engagement map bubble chart
-    st.subheader("Engagement Map: Rating vs Review Volume")
+    # Wow visual: engagement map (chart copy)
     plot_df = chart_curm.dropna(subset=["product_rating"])
     if guard(plot_df, "No rating values to visualize."):
         sizes = safe_bubble_sizes(plot_df.get("purchased_last_month"))
@@ -881,7 +896,7 @@ with tabs[4]:
                 y="total_reviews",
                 color="Category_std",
                 opacity=0.9,
-                title="Rating vs Reviews by Product"
+                title="Engagement Map — Rating vs Reviews"
             )
         else:
             figm1 = px.scatter(
@@ -891,82 +906,95 @@ with tabs[4]:
                 color="Category_std",
                 size=sizes,
                 opacity=0.9,
-                title="Rating vs Reviews by Product (Bubble Size = Purchases)"
+                title="Engagement Map — Rating vs Reviews (Bubble = Purchases)"
             )
-        figm1.update_layout(xaxis_title="Average Rating (★)", yaxis_title="Review Volume")
+        figm1.update_layout(
+            xaxis_title="Average Rating (★)",
+            yaxis_title="Review Volume"
+        )
         st.plotly_chart(figm1, use_container_width=True)
-        st.markdown(
-            "_Dots in the top-right represent products people both love and talk about. Those are strong candidates for creator content._"
+        st.caption(
+            "Dots with high rating and many reviews are strong advocacy signals. Larger bubbles mark heavier volume."
         )
 
-    # conversion proxy: purchases per review
-    st.subheader("Conversion Proxy: Purchases Per Review")
-    conv = (chart_curm.groupby("Category_std", as_index=False)
-            .agg(purchases=("purchased_last_month", "sum"),
-                 reviews=("total_reviews", "sum")))
+    # Conversion proxy (chart copy)
+    conv = (
+        chart_curm.groupby("Category_std", as_index=False)
+        .agg(
+            purchases=("purchased_last_month", "sum"),
+            reviews=("total_reviews", "sum")
+        )
+    )
     if guard(conv, "No review totals available for conversion proxy."):
         conv["purch_per_review"] = conv.apply(
             lambda r: r["purchases"] / r["reviews"] if r["reviews"] not in [0, np.nan] else np.nan,
             axis=1
         )
-        conv = conv.dropna(subset=["purch_per_review"]).sort_values("purch_per_review", ascending=False).head(10)
+        conv = (
+            conv.dropna(subset=["purch_per_review"])
+            .sort_values("purch_per_review", ascending=False)
+            .head(10)
+        )
         if guard(conv, "No conversion proxy to show."):
             figc = px.bar(
                 conv,
                 x="Category_std",
                 y="purch_per_review",
                 text_auto=".2f",
-                title="Purchases Per Review by Category"
+                title="Purchases Per Review (Conversion Proxy)"
             )
-            figc.update_layout(xaxis_title="Category", yaxis_title="Purchases / Review")
+            figc.update_layout(
+                xaxis_title="Category",
+                yaxis_title="Purchases / Review"
+            )
             st.plotly_chart(figc, use_container_width=True)
-            st.markdown(
-                "_Higher bars suggest categories where each review moves more people to buy. Those are good bets for paid and organic placement._"
-            )
-            lead = conv.iloc[0]
-            box_result(
-                "High Intent Signal",
-                f"{lead['Category_std']} converts reviews to purchases efficiently.",
-                "good"
+            st.caption(
+                "Higher bars mean each review converts into more purchases. These categories are strong bets for paid and organic placement."
             )
 
-    # simple keyword view from reviews text
-    st.subheader("Common Customer Words In Reviews")
+    # Keyword-style view if reviews exist (raw reviews)
     if reviews is not None and "review_text" in reviews.columns:
+        st.subheader("Common Customer Words")
         rcur = reviews.copy()
         if "month" in rcur.columns:
             rcur = rcur[rcur["month"] == month_focus]
         if "Category_std" in rcur.columns and cat_sel:
             rcur = rcur[rcur["Category_std"].isin(cat_sel)]
+
         if guard(rcur, "No reviews available for this slice."):
             low = rcur["review_text"].astype(str).str.lower()
             words = pd.Series(" ".join(low.tolist()))
             words = words.str.replace(r"[^a-z\s]", "", regex=True).str.split()
             words = pd.Series([w for lst in words.dropna().tolist() for w in lst])
             stop = set(
-                "the and to a of is it for in on my this that very too but not as be are you i so at have "
-                "its they we just would".split()
+                "the and to a of is it for in on my this that very too but not as be are you i so at have its "
+                "they we just would".split()
             )
             topw = words[~words.isin(stop)].value_counts().head(12).reset_index()
             topw.columns = ["word", "count"]
             if guard(topw, "No frequent words to display."):
-                figw = px.bar(topw, x="word", y="count", text_auto=".2s",
-                              title="Frequent Words in Reviews (This Slice)")
-                st.plotly_chart(figw, use_container_width=True)
-                st.markdown(
-                    "_These words are hints for topics and language to use in short-form videos and product page copy._"
+                figw = px.bar(
+                    topw,
+                    x="word",
+                    y="count",
+                    text_auto=".2s",
+                    title="Most Common Words in Reviews (This Slice)"
                 )
-                box_warn(
-                    "Interpret Carefully",
-                    "Skim a few underlying reviews before using a word in marketing. Some frequent words show complaints."
+                st.plotly_chart(figw, use_container_width=True)
+                st.caption(
+                    "These words hint at what customers care about most. Use them as topics for short videos, FAQs, and product page copy."
                 )
 
-    # platform mix suggestion
-    st.subheader("Suggested Platform Mix By Category")
-    plat = (chart_curm.groupby("Category_std", as_index=False)
-            .agg(rating=("product_rating", "mean"),
-                 reviews=("total_reviews", "sum"),
-                 price=("discounted_price", "median")))
+    # Platform mix suggestion (chart copy)
+    st.subheader("Suggested Platform Mix by Category")
+    plat = (
+        chart_curm.groupby("Category_std", as_index=False)
+        .agg(
+            rating=("product_rating", "mean"),
+            reviews=("total_reviews", "sum"),
+            price=("discounted_price", "median")
+        )
+    )
     if guard(plat, "Not enough fields to build a platform plan."):
         def platform_row(r):
             tiktok = 0.0
@@ -977,7 +1005,8 @@ with tabs[4]:
                 if r["rating"] >= 4.2 and r["reviews"] >= np.nanpercentile(plat["reviews"], 60):
                     tiktok += 0.35
                     reels += 0.35
-                if (r["rating"] < 4.2 and pd.notna(r["price"]) and r["price"] >= np.nanmedian(plat["price"])):
+                if (r["rating"] < 4.2 and pd.notna(r["price"])
+                        and r["price"] >= np.nanmedian(plat["price"])):
                     youtube += 0.4
                 if r["reviews"] < np.nanpercentile(plat["reviews"], 40) and r["rating"] < 4.1:
                     paid += 0.4
@@ -991,8 +1020,8 @@ with tabs[4]:
                 "Paid Search": round(100 * paid / s, 1),
             })
 
-        mix_pf = plat.join(plat.apply(platform_row, axis=1))
-        melt = mix_pf.melt(
+        mix = plat.join(plat.apply(platform_row, axis=1))
+        melt = mix.melt(
             id_vars=["Category_std"],
             value_vars=["TikTok", "IG Reels", "YouTube", "Paid Search"],
             var_name="Platform",
@@ -1004,49 +1033,47 @@ with tabs[4]:
             y="Share %",
             color="Platform",
             barmode="stack",
-            title="Recommended Platform Mix By Category"
+            title="Recommended Platform Mix by Category"
         )
         st.plotly_chart(figpm, use_container_width=True)
-        st.markdown(
-            "_Use this as a starting split by platform, then adjust based on real results._"
+        st.caption(
+            "Stacked bars give a simple starting point for spreading effort across TikTok, IG Reels, YouTube, and paid search."
         )
 
-    # seven day content plan
+    # Seven-day content plan (keep calendar emojis)
     st.subheader("Seven-Day Content Plan")
-    top_cats = (chart_curm.groupby("Category_std")["purchased_last_month"]
-                .sum()
-                .sort_values(ascending=False)
-                .head(3)
-                .index
-                .tolist())
+    top_cats = (
+        chart_curm.groupby("Category_std")["purchased_last_month"]
+        .sum()
+        .sort_values(ascending=False)
+        .head(3)
+        .index.tolist()
+    )
     if not top_cats:
         top_cats = ["Top Category"]
 
     cal = [
-        f"Day 1: 15–30 second creator short on why **{top_cats[0]}** solves a real problem.",
-        f"Day 2: Product page demo for **{top_cats[0]}** covering the top three benefits.",
-        "Day 3: Social proof reel with one strong review on screen over product footage.",
-        "Day 4: Quick FAQ clip answering the most common question from reviews.",
-        f"Day 5: Compare **{top_cats[0]}** vs {top_cats[1] if len(top_cats) > 1 else 'a close alternative'} and explain who each product is for.",
-        "Day 6: Daily use montage with three real-life use cases.",
-        "Day 7: Community Q&A with two real customer questions answered in under 30 seconds each."
+        f"📅 Day 1 — Creator short (15–30s): “Why {top_cats[0]} solves a real problem.” Show it in use.",
+        f"📅 Day 2 — Product page demo: unbox {top_cats[0]} and cover the top three benefits in under 30 seconds.",
+        f"📅 Day 3 — Social proof reel: put the best review on screen over product footage.",
+        f"📅 Day 4 — Quick fix: answer the most common question from reviews in one short clip.",
+        f"📅 Day 5 — Compare: {top_cats[0]} vs {top_cats[1] if len(top_cats)>1 else 'another option'} — who is each for.",
+        f"📅 Day 6 — Daily use montage: three quick shots that show real life use cases.",
+        f"📅 Day 7 — Community Q&A: answer two real customer questions in 30 seconds each.",
     ]
-    st.markdown("- " + "\n- ".join(cal))
-    st.markdown(
-        "_Post on TikTok and IG Reels. Pin the best demo to the product page hero video where possible._"
-    )
+    st.write("\n".join([f"- {row}" for row in cal]))
+    st.caption("Post on TikTok and IG Reels, then reuse the strongest clips on the product page and in ads.")
 
 
-# --------------- TAB 5: PRODUCT & PRICING -----------------
+# ------------- TAB 5: PRODUCT & PRICING ------------------------
 with tabs[5]:
     st.header(f"Product & Pricing — {month_focus}")
-    st.caption("🧪 How customers rate products and how far prices step down from list.")
+    st.caption("🧪 Quality, price ladders, and which products need the most help.")
 
     if not guard(curm, "No rows for this month after filters."):
         st.stop()
 
-    # hero visualization: rating distributions
-    st.subheader("Rating Distributions by Category")
+    # Wow visual: ratings by category (chart copy)
     if "product_rating" in chart_curm.columns and chart_curm["product_rating"].notna().any():
         figp1 = px.box(
             chart_curm.dropna(subset=["product_rating"]),
@@ -1057,59 +1084,73 @@ with tabs[5]:
         )
         figp1.update_layout(xaxis_title="", yaxis_title="Rating (★)")
         st.plotly_chart(figp1, use_container_width=True)
-        st.markdown(
-            "_Boxes show the range and typical rating per category. Lower medians signal friction or mismatched expectations._"
+        st.caption(
+            "Boxes show the rating range within each category. Lower medians hint at friction or mismatched expectations."
         )
-
         worst = curm.groupby("Category_std")["product_rating"].mean().sort_values().head(1)
         if not worst.empty:
             wcat, wr = worst.index[0], worst.values[0]
             level = "bad" if wr < 4.0 else "ok"
             box_result(
                 "Lowest Average Rating",
-                f"{wcat} averages {wr:.2f} stars. Clarify expectations and show the product in use.",
+                f"{wcat} averages {wr:.2f} stars. This is a priority category for content fixes and expectation setting.",
                 level
             )
 
-    st.subheader("Price Ladder (List vs Discounted)")
+    # Price ladder (chart copy)
     if {"original_price", "discounted_price"}.issubset(chart_curm.columns):
-        ladder = (chart_curm[["Category_std", "original_price", "discounted_price"]]
-                  .dropna()
-                  .groupby("Category_std")
-                  .median()
-                  .reset_index())
+        ladder = (
+            chart_curm[["Category_std", "original_price", "discounted_price"]]
+            .dropna()
+            .groupby("Category_std")
+            .median()
+            .reset_index()
+        )
         if guard(ladder, "No price ladder to show."):
             figp2 = px.scatter(
                 ladder,
                 x="original_price",
                 y="discounted_price",
                 color="Category_std",
-                title="Median Original vs Discounted Price by Category"
+                title="Price Ladder (Median Original vs Discounted Price)"
             )
-            figp2.update_layout(xaxis_title="Original Price (median)", yaxis_title="Discounted Price (median)")
+            figp2.update_layout(
+                xaxis_title="Original Price (median)",
+                yaxis_title="Discounted Price (median)"
+            )
             st.plotly_chart(figp2, use_container_width=True)
-            st.markdown(
-                "_Dots far below the diagonal implied line (where discounted equals original) suggest heavy discounting._"
+            st.caption(
+                "Dots far below the diagonal represent categories that lean heavily on discounts to move units."
             )
 
             heavy = ladder[ladder["discounted_price"] <= 0.7 * ladder["original_price"]]
             tone = "ok" if heavy.empty else "bad"
             msg = (
-                "Median discounted prices sit close to list. Pricing posture looks balanced."
+                "Median discounted prices sit close to list. Pricing looks healthy."
                 if heavy.empty else
-                "Some categories lean on deep discounts. Test lighter promos with sharper value messages."
+                "Some categories rely on deep discounts. Consider testing lighter promos with stronger value copy."
             )
             box_result("Pricing Posture", msg, tone)
 
-    st.subheader("Underperformers Needing Attention")
-    under = (curm.assign(
-        rating=curm["product_rating"],
-        purch=curm["purchased_last_month"]
-    ).dropna(subset=["rating", "purch"]))
+    # Underperformers table (raw data)
+    under = (
+        curm.assign(
+            rating=curm["product_rating"],
+            purch=curm["purchased_last_month"]
+        )
+        .dropna(subset=["rating", "purch"])
+    )
     if not under.empty:
         under = under.sort_values(["rating", "purch"], ascending=[True, False])
         under = under.drop_duplicates(subset=["product_title"], keep="first").head(10)
-        view = under[["product_title", "Category_std", "rating", "purch", "discount_percentage"]]
+        view = under[[
+            "product_title",
+            "Category_std",
+            "rating",
+            "purch",
+            "discount_percentage"
+        ]]
+        st.subheader("Underperformers Needing Attention")
         st.dataframe(
             view.rename(columns={
                 "product_title": "Product",
@@ -1120,22 +1161,26 @@ with tabs[5]:
             }),
             use_container_width=True
         )
-        st.markdown(
-            "_Low-rating, high-volume products are prime candidates for better onboarding, clearer photos, or revised descriptions._"
+        st.write(
+            "Start with low-rating, high-volume items. Improve images, clarify sizing or features, "
+            "and use creator content to reset expectations."
         )
 
 
-# --------------- TAB 6: PLANS & ACCOUNTABILITY -----------------
+# ------------- TAB 6: PLANS & ACCOUNTABILITY -------------------
 with tabs[6]:
     st.header("Plans & Accountability")
-    st.caption("🗂️ Cross-team next steps tied to the metrics you saw in the other tabs.")
+    st.caption("🗂️ Concrete followups with teams, owners, and suggested due dates.")
 
     actions = []
 
-    # largest month over month move
-    g = (sales_f.groupby(["month", "Category_std"])["purchased_last_month"].sum()
-         .reset_index()
-         .sort_values("month"))
+    # Category with largest month over month move (raw sales_f)
+    g = (
+        sales_f.groupby(["month", "Category_std"])["purchased_last_month"]
+        .sum()
+        .reset_index()
+        .sort_values("month")
+    )
     if not g.empty and prev_month in g["month"].values and month_focus in g["month"].values:
         pm = g[g["month"] == prev_month].set_index("Category_std")["purchased_last_month"]
         cm = g[g["month"] == month_focus].set_index("Category_std")["purchased_last_month"]
@@ -1150,47 +1195,47 @@ with tabs[6]:
             direction = "up" if d > 0 else "down"
             actions.append(dict(
                 team="Executive",
-                action=f"{cat} moved {direction} by {abs(d):,.0f} MoM. Set a numeric target and assign an owner.",
+                action=f"{cat} moved {direction} by {abs(d):,.0f} month over month. Set a numeric target and an owner.",
                 priority="High",
                 due=(date.today() + timedelta(days=7)).isoformat(),
                 status="Open"
             ))
 
-    # review momentum
+    # Review momentum (raw totals)
     if cur["reviews"] and pre["reviews"] and cur["reviews"] < pre["reviews"]:
         actions.append(dict(
             team="Marketing & Content",
-            action="Review volume slipped. Refresh creatives, seed UGC, and add social proof blocks on PDP.",
+            action="Review volume slipped. Refresh creatives, seed UGC, and highlight top reviews on key PDPs.",
             priority="High",
             due=(date.today() + timedelta(days=10)).isoformat(),
             status="Open"
         ))
 
-    # heavy discounts
+    # Heavy discounts (raw)
     if pd.notna(cur["disc"]) and cur["disc"] >= 30:
         actions.append(dict(
             team="Finance & Ops",
-            action=f"Average discount is {cur['disc']:.1f}%. Test lighter discounts using bundles and clearer value bullets.",
+            action=f"Average discount is {cur['disc']:.1f}%. Test lighter discounts with bundles and clearer value copy.",
             priority="Medium",
             due=(date.today() + timedelta(days=14)).isoformat(),
             status="Open"
         ))
 
-    # low category rating
+    # Low rating category (raw)
     lowcat = curm.groupby("Category_std")["product_rating"].mean().sort_values().head(1)
     if not lowcat.empty and lowcat.values[0] < 4.0:
         actions.append(dict(
             team="Product & Pricing",
-            action=f"{lowcat.index[0]} averages {lowcat.values[0]:.2f}★. Add 20–30 second demos and clarify sizing and care.",
+            action=f"{lowcat.index[0]} averages {lowcat.values[0]:.2f}★. Add demos, clarify sizing and care, and update bullets.",
             priority="Medium",
             due=(date.today() + timedelta(days=14)).isoformat(),
             status="Open"
         ))
 
-    # always share recap
+    # Always include a share step
     actions.append(dict(
         team="Cross-Team",
-        action="Record a 10-minute Loom or meeting walkthrough of this hub and share highlights in the team channel.",
+        action="Record a 10-minute Loom walkthrough of this month's dashboard and share with key stakeholders.",
         priority="Low",
         due=(date.today() + timedelta(days=5)).isoformat(),
         status="Open"
@@ -1205,8 +1250,8 @@ with tabs[6]:
             file_name="action_plan.csv",
             mime="text/csv"
         )
-        st.markdown(
-            "_Use this table as a living list. After export, you can track status in your project tool or spreadsheet._"
+        st.write(
+            "_Use this table as a living plan. Assign owners, update statuses, and rerun the dashboard each month to track progress._"
         )
     else:
-        box_warn("No Actions Generated", "Try a different month or widen categories to reveal more signals.")
+        st.write("No actions generated for this slice. Try a different month or a wider category selection.")
