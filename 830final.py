@@ -2,35 +2,34 @@
 # 📦 AMAZON COMPANY HUB — TWO-MONTH INSIGHTS (CMSE 830 MIDTERM)
 # ============================================================
 # what this file delivers (plain english):
-#   - a non-technical, executive-friendly hub with six tabs:
+#   - a non-technical, executive-friendly hub with seven tabs:
 #       1) how to use (full project intro, datasets, why it matters)
-#       2) executive snapshot (kpis, trend, mix, highlights, plan)
-#       3) finance & ops (discount posture, volumes, ops checklist)
-#       4) marketing & content strategy (engagement, keywords, platform plan, content calendar)
-#       5) product & pricing (ratings, price ladder, underperformers)
-#       6) plans & accountability (cross-team action list + download)
+#       2) imputation & modeling (missing data, imputation examples, linear regression)
+#       3) executive snapshot (kpis, trend, mix, highlights, plan)
+#       4) finance & ops (discount posture, volumes, ops checklist)
+#       5) marketing & content strategy (engagement, keywords, platform plan, content calendar)
+#       6) product & pricing (ratings, price ladder, underperformers)
+#       7) plans & accountability (cross-team action list + download)
 #   - everything is filter-aware by month and category
 #   - color system:
 #         • green / yellow / red  → results or alerts only
 #         • blue                  → informational guidance
 #   - heavy comments above blocks (not inline), clear sentences, no em dashes
-# data files expected in the same folder as this app:
-#   - required: amazon_sales_with_two_months.csv
-#   - optional: amazon_reviews.csv
-#   - optional: amazon_products.csv (extra product metadata if you have it)
+# data files expected beside this file inside the repo:
+#   - required: data/data.zip containing:
+#         • amazon_sales_with_two_months_small.csv
+#         • amazon_reviews_small.csv
+#         • amazon_products_small.csv
 # ============================================================
 
-
-# importing streamlit and analysis libraries used across the app
-# streamlit builds the ui, pandas/numpy handle data, plotly draws charts
-# datetime is for due dates in action plans, textblob gives simple sentiment if reviews are present
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 from datetime import date, timedelta
 from textblob import TextBlob
-
+import os
+import zipfile
 
 # setting a page title and making the layout wide so charts can use the space
 st.set_page_config(page_title="Amazon Company Hub", layout="wide")
@@ -38,9 +37,7 @@ st.set_page_config(page_title="Amazon Company Hub", layout="wide")
 # top-level page title so users know where they are
 st.title("📦 Amazon Company Hub — Two-Month Insights")
 
-
 # defining a small color system for result and info boxes
-# this lets us reuse the same look everywhere and stay consistent
 PALETTE = {
     "good": {"bg": "#DCFCE7", "bar": "#22C55E", "emoji": "✅"},
     "ok":   {"bg": "#FEF9C3", "bar": "#EAB308", "emoji": "🟨"},
@@ -50,15 +47,8 @@ PALETTE = {
 }
 
 # helper to render a colored callout box with a title, bold headline, and body text
-# tone chooses the color and emoji
 def _box(title, headline, text, tone="info"):
-    """
-    render a colored box with a left bar, a bold headline, and a short body
-    tone: "good" | "ok" | "bad" | "info" | "warn"
-    """
-    # choose the color set for the requested tone
     style = PALETTE.get(tone, PALETTE["info"])
-    # build the html for the callout
     st.markdown(
         f"""
 <div style="border-left:8px solid {style['bar']}; background:{style['bg']};
@@ -71,31 +61,17 @@ def _box(title, headline, text, tone="info"):
         unsafe_allow_html=True,
     )
 
-# simple wrapper for result or alert boxes using traffic light colors
 def box_result(headline, text, level="ok", title="Result"):
-    """
-    results and alerts use traffic-light colors
-    """
     _box(title=title, headline=headline, text=text, tone=level)
 
-# simple wrapper for blue info boxes used for guidance or tips
 def box_info(headline, text, title="Notes"):
-    """
-    informational guidance uses blue
-    """
     _box(title=title, headline=headline, text=text, tone="info")
 
-# simple wrapper for pink caution boxes that draw attention but are not errors
 def box_warn(headline, text, title="Attention"):
-    """
-    gentle warning box
-    """
     _box(title=title, headline=headline, text=text, tone="warn")
 
 # helper to place small gray figure captions under a chart
-# this explains why the chart exists and what to do with it
 def fig_notes(why, what, sowhat, nextstep):
-    # markdown with muted background and small font so it reads like a caption
     st.markdown(
         f"""
 <div style="font-size: 0.92rem; color:#374151; background:#F3F4F6; border-radius:10px; padding:12px 14px; margin-top:-6px;">
@@ -108,13 +84,9 @@ def fig_notes(why, what, sowhat, nextstep):
         unsafe_allow_html=True
     )
 
+# === basic helpers ==========================================================
 
-# utility to read a csv with several common encodings
-# returns None if the file is missing so we can stop gracefully
 def safe_read_csv(path):
-    """
-    read a csv with fallback encodings; return None if not found
-    """
     if path is None:
         return None
     for enc in ["utf-8", "utf-8-sig", "cp1252", "latin1"]:
@@ -127,19 +99,10 @@ def safe_read_csv(path):
     except Exception:
         return None
 
-# utility to coerce a series to numeric without crashing on bad strings
 def safe_num(s):
-    """
-    coerce to numeric and keep NaNs
-    """
     return pd.to_numeric(s, errors="coerce")
 
-# utility to map values into bubble sizes for scatter plots
-# returns None if sizing would be invalid so plots do not crash
 def safe_bubble_sizes(series, min_size=8, max_size=40):
-    """
-    scale values to bubble sizes; return None if invalid so plots do not crash
-    """
     if series is None:
         return None
     s = pd.to_numeric(series, errors="coerce").fillna(0)
@@ -150,27 +113,18 @@ def safe_bubble_sizes(series, min_size=8, max_size=40):
         return None
     return (min_size + (s / m) * (max_size - min_size)).astype(float)
 
-# guard helper to avoid drawing charts on empty data
-# shows a friendly info message instead of breaking
 def guard(df, message):
-    """
-    if a slice is empty, show a friendly note and skip rendering
-    """
     if df is None or df.empty:
         st.info(message)
         return False
     return True
 
-# small safe percent helper to avoid divide by zero
 def pct(n, d):
-    """
-    percentage helper that handles divide by zero
-    """
     if d in [0, None, np.nan] or pd.isna(d):
         return np.nan
     return 100.0 * n / d
 
-# NEW: simple median-by-category imputation for charts only
+# median-by-category imputation for charts only
 def impute_by_category(df):
     """
     fill missing numeric values with median by category, then overall median
@@ -193,19 +147,10 @@ def impute_by_category(df):
             df_imp[col] = df_imp[col].fillna(overall)
     return df_imp
 
+# === load data from data/data.zip ===========================================
 
-# read data from a zipped bundle so the repo stays small and easy to clone
-# expect: data/data.zip contains:
-#   - amazon_sales_with_two_months_small.csv    (required)
-#   - amazon_reviews_small.csv                  (optional)
-#   - amazon_products_small.csv                 (optional)
-import os
-import zipfile
-
-# set the path to the zip that lives inside the repo's data folder
 data_zip_path = os.path.join("data", "data.zip")
 
-# small helper to read a csv by name from inside the zip, returns None if missing
 def _read_from_zip(zf: zipfile.ZipFile, member: str):
     try:
         with zf.open(member) as f:
@@ -214,75 +159,52 @@ def _read_from_zip(zf: zipfile.ZipFile, member: str):
         return None
 
 try:
-    # try loading from the zip first (preferred)
     with zipfile.ZipFile(data_zip_path) as z:
-        # required sales (must exist or we stop)
         sales = _read_from_zip(z, "amazon_sales_with_two_months_small.csv")
         if sales is None:
-            st.error("Missing **amazon_sales_with_two_months_small.csv** inside data/data.zip.")
+            st.error("Missing amazon_sales_with_two_months_small.csv inside data/data.zip.")
             st.stop()
-
-        # optional datasets; it's okay if they are not present
         reviews = _read_from_zip(z, "amazon_reviews_small.csv")
         catalog = _read_from_zip(z, "amazon_products_small.csv")
-
 except FileNotFoundError:
-    # if the zip file is not found, fall back to plain csv files in the data folder
-    # this lets the app still run if someone unzipped them manually
     sales   = safe_read_csv(os.path.join("data", "amazon_sales_with_two_months_small.csv"))
     reviews = safe_read_csv(os.path.join("data", "amazon_reviews_small.csv"))
     catalog = safe_read_csv(os.path.join("data", "amazon_products_small.csv"))
-
-    # sales is required; if still missing, stop with a clear message
     if sales is None:
-        st.error("Could not find data. Expect **data/data.zip** or **data/amazon_sales_with_two_months_small.csv**.")
+        st.error("Could not find data. Expect data/data.zip or data/amazon_sales_with_two_months_small.csv.")
         st.stop()
 except Exception as e:
-    # catch any other unexpected loading errors and stop cleanly
     st.error(f"Error loading data from zip: {e}")
     st.stop()
 
+# === prep functions =========================================================
 
-# function to standardize the sales dataset
-# this adds a month column, cleans numeric fields, normalizes categories, and sets promo flags
 def prep_sales(df):
     """
     standardize month, numerics, category, and promo flags
     """
     df = df.copy()
-
-    # set or derive a month column used for filtering and trends
     if "month" not in df.columns:
         if "data_collected_at" in df.columns:
             df["month"] = pd.to_datetime(df["data_collected_at"], errors="coerce").dt.to_period("M").astype(str)
         else:
             df["month"] = "2025-08"
-
-    # coerce known numeric columns so summaries and plots work
     for c in ["purchased_last_month", "product_rating", "total_reviews",
               "discount_percentage", "discounted_price", "original_price"]:
         if c in df.columns:
             df[c] = safe_num(df[c])
-
-    # create a consistent category column even if the source uses different names
     if "product_category" in df.columns:
         df["Category_std"] = df["product_category"].astype(str).str.strip()
     else:
         df["Category_std"] = "Unknown"
-
-    # set simple boolean flags for common promo fields when present
     for src, dst in [("is_best_seller", "flag_best_seller"),
                      ("has_coupon", "flag_coupon"),
                      ("is_sponsored", "flag_sponsored")]:
         if src in df.columns:
             s = df[src].astype(str).str.lower().str.strip()
             df[dst] = s.isin(["true", "1", "yes", "y", "t"])
-
-    # drop rows with missing month to keep charts clean
     return df.dropna(subset=["month"])
 
-# function to lightly clean reviews if we have them
-# tries to find a date column, a rating column, and review text, and then adds sentiment
 def prep_reviews(df):
     """
     light cleaning: month, numeric rating, review text, sentiment, category
@@ -290,18 +212,12 @@ def prep_reviews(df):
     if df is None:
         return None
     df = df.copy()
-
-    # infer a month from any column that looks like a date
     date_col = next((c for c in df.columns if "date" in c.lower()), None)
     if date_col:
         df["month"] = pd.to_datetime(df[date_col], errors="coerce").dt.to_period("M").astype(str)
-
-    # standardize rating to a numeric field
     rate_col = next((c for c in df.columns if "rating" in c.lower()), None)
     if rate_col:
         df["rating"] = safe_num(df[rate_col])
-
-    # create a review_text field and a simple sentiment score if text exists
     text_col = next((c for c in df.columns if ("text" in c.lower() or "review" in c.lower())), None)
     if text_col:
         df["review_text"] = df[text_col].astype(str).fillna("")
@@ -309,15 +225,11 @@ def prep_reviews(df):
             df["sentiment"] = df["review_text"].apply(lambda x: TextBlob(x).sentiment.polarity)
         except Exception:
             df["sentiment"] = np.nan
-
-    # normalize category if present
     cat_col = next((c for c in df.columns if "category" in c.lower()), None)
     if cat_col:
         df["Category_std"] = df[cat_col].astype(str).str.strip()
-
     return df
 
-# function to normalize optional product metadata if present
 def prep_catalog(df):
     """
     optional: normalize product metadata if available
@@ -325,38 +237,30 @@ def prep_catalog(df):
     if df is None:
         return None
     df = df.copy()
-    # clean any price columns
     for c in ["discounted_price", "actual_price", "original_price"]:
         if c in df.columns:
             df[c] = safe_num(df[c])
-    # strip leading and trailing spaces on names and titles
     for c in ["product_name", "product_title"]:
         if c in df.columns:
             df[c] = df[c].astype(str).str.strip()
-    # normalize category name if needed
     if "category" in df.columns and "Category_std" not in df.columns:
         df["Category_std"] = df["category"].astype(str).str.strip()
     return df
 
-# apply standardization to each dataset now so the rest of the app is simpler
 sales   = prep_sales(sales)
 reviews = prep_reviews(reviews)
 catalog = prep_catalog(catalog)
 
+# === sidebar controls =======================================================
 
-# add a sidebar for month and category choices, a small legend, and a data quality toggle
 st.sidebar.header("Controls")
 
-# build the month options from the sales file and let the user pick the current month to view
 months_all = sorted(sales["month"].dropna().unique().tolist())
 month_focus = st.sidebar.selectbox("Month", months_all, index=len(months_all) - 1)
 
-# compute the previous month string so we can show month over month changes
 prev_idx = max(0, months_all.index(month_focus) - 1)
 prev_month = months_all[prev_idx]
 
-# build a ranked category list for the selected month based on purchase counts
-# labels include the count to help users choose
 cat_counts = (
     sales[sales["month"] == month_focus]
     .groupby("Category_std")["purchased_last_month"]
@@ -365,35 +269,22 @@ cat_counts = (
 )
 labels = [f"{c} ({int(cat_counts[c]):,})" for c in cat_counts.index]
 label_to_val = dict(zip(labels, cat_counts.index.tolist()))
-
-# let users pick several categories at once; default to the top five if there are many
 chosen = st.sidebar.multiselect("Categories", labels, default=labels[:5] if len(labels) > 5 else labels)
 cat_sel = [label_to_val[x] for x in chosen] if chosen else []
 
-# filter the sales frame to only the chosen categories
-# if that creates an empty slice we fall back to the full set and warn the user
 sales_f = sales[sales["Category_std"].isin(cat_sel)] if cat_sel else sales.copy()
 if sales_f.empty:
     st.warning("That category selection returned no rows. Showing all categories instead.")
     sales_f = sales.copy()
 
-# make a current month slice and a previous month slice for comparisons (raw for KPIs)
 curm  = sales_f[sales_f["month"] == month_focus]
 prevm = sales_f[sales_f["month"] == prev_month]
 
-# NEW: data quality section in sidebar with imputation toggle
-st.sidebar.markdown("### Data Quality")
-impute_charts = st.sidebar.checkbox(
-    "Turn on median-by-category imputation for charts",
-    value=False
-)
-
-# NEW: copies for charts, leave raw frames for KPIs and action plan
-chart_sales_f = impute_by_category(sales_f) if impute_charts else sales_f
+# charts always use an imputed copy; KPIs and action rules use the raw filtered data
+chart_sales_f = impute_by_category(sales_f)
 chart_curm    = chart_sales_f[chart_sales_f["month"] == month_focus]
 chart_prevm   = chart_sales_f[chart_sales_f["month"] == prev_month]
 
-# show a small legend so users can decode the color boxes
 st.sidebar.markdown("### Legend")
 st.sidebar.write("✅ Good result")
 st.sidebar.write("🟨 Okay result")
@@ -401,13 +292,13 @@ st.sidebar.write("🟥 Needs attention")
 st.sidebar.write("ℹ️ Information")
 st.sidebar.write("⚠️ Reminder")
 
-# quick reminders so first-time users know where to click
 st.sidebar.markdown("### Reminders")
 st.sidebar.write("• Change the month to see different snapshots.")
 st.sidebar.write("• Narrow categories to focus the story.")
 st.sidebar.write("• Download actions at the end for follow up.")
 
-# compute kpis for a given slice so we can show metrics and differences
+# === KPI + regression helpers ==============================================
+
 def kpi_block(df):
     if df is None or df.empty:
         return dict(purchases=0, rating=np.nan, disc=np.nan, reviews=0)
@@ -418,11 +309,11 @@ def kpi_block(df):
         reviews   = safe_num(df.get("total_reviews")).sum(skipna=True),
     )
 
-# NEW: simple regression helper to explain drivers using numpy only
 def simple_regression_purchases(df):
     """
-    simple multi driver regression using standardized variables
-    this fits on filtered categories across all months
+    multiple linear regression with standardized predictors using numpy only
+    y = purchased_last_month
+    X = rating, discount, total reviews (where available)
     """
     if df is None or df.empty:
         return None, None, None
@@ -477,19 +368,18 @@ def simple_regression_purchases(df):
     coef_df = coef_df.sort_values("|β|", ascending=False).reset_index(drop=True)
     return coef_df, temp, used_cols
 
-
-# compute kpis for current and previous month (raw)
 cur = kpi_block(curm)
 pre = kpi_block(prevm)
 
-# compute month over month changes safely, keeping None if we cannot compute a delta
 delta_purch  = None if pre["purchases"] in [0, None, np.nan] else cur["purchases"] - pre["purchases"]
 delta_rating = None if pd.isna(pre["rating"]) else cur["rating"] - pre["rating"]
 delta_disc   = None if pd.isna(pre["disc"]) else cur["disc"] - pre["disc"]
 
-# create tabs for each audience to keep the story clean and focused
+# === tabs ===================================================================
+
 tabs = st.tabs([
     "How To Use",
+    "Imputation & Modeling",
     "Executive Snapshot",
     "Finance & Ops",
     "Marketing & Content Strategy",
@@ -497,10 +387,9 @@ tabs = st.tabs([
     "Plans & Accountability",
 ])
 
+# === TAB 0: HOW TO USE ======================================================
 
-# how to use tab gives context for beginners and graders
 with tabs[0]:
-    # friendly welcome that explains the idea in plain words
     st.subheader("Welcome")
     st.write(
         "This hub helps executives and teams understand performance without reading code. "
@@ -509,7 +398,6 @@ with tabs[0]:
         "Green means good, yellow means needs a look, red means fix now. Blue boxes give simple guidance."
     )
 
-    # explain the project goal so the grader knows what success looks like
     st.subheader("Project Goal")
     st.write(
         "The goal is a shared snapshot that combines sales activity, ratings, and review signals. "
@@ -517,7 +405,19 @@ with tabs[0]:
         "This format is reusable across companies and roles because it avoids jargon and uses plain language."
     )
 
-    # list what the app actually does to support the goal
+    # key terms come early so the rest of the story is easier to follow
+    st.subheader("Key Terms and Acronyms")
+    st.write(
+        "• **KPI**: Key Performance Indicator. A small number that tells you quickly if things are going well.  \n"
+        "• **MoM**: Month over month. Comparing this month to the previous month.  \n"
+        "• **Conversion**: When a shopper actually buys after viewing a product.  \n"
+        "• **PDP**: Product detail page. The main page for a single item on Amazon.  \n"
+        "• **UGC**: User generated content. Posts, reviews, and videos made by real customers, not the brand.  \n"
+        "• **Discount posture**: How aggressive our discounts are on average.  \n"
+        "• **Platform mix**: How we split content across TikTok, Instagram Reels, YouTube, and paid search.  \n"
+        "• **Price ladder**: How the original price and discounted price line up across categories."
+    )
+
     st.subheader("What This App Does")
     st.write(
         "• Merges product-level activity by month with quality signals like ratings and review volume.  \n"
@@ -526,7 +426,6 @@ with tabs[0]:
         "• Converts findings into a simple action list with owners and due dates."
     )
 
-    # give a personal reason for choosing this project so it reads like a real proposal
     st.subheader("Why I Chose This Project")
     st.write(
         "I want to work on the business side where communication matters. "
@@ -535,21 +434,44 @@ with tabs[0]:
         "and it teaches non-technical teammates how to use data without reading code."
     )
 
-    # show which datasets are loaded and what each adds
     st.subheader("Datasets")
     ds_rows = []
-    ds_rows.append(["amazon_sales_with_two_months.csv", len(sales), "Required", "Sales by product and category with month, rating, reviews, and discount fields."])
+    ds_rows.append([
+        "amazon_sales_with_two_months_small.csv",
+        len(sales),
+        "Required",
+        "Sales by product and category with month, rating, reviews, and discount fields."
+    ])
     if reviews is not None:
-        ds_rows.append(["amazon_reviews.csv", len(reviews), "Optional", "Text reviews, ratings, and sentiment used for keywords and content planning."])
+        ds_rows.append([
+            "amazon_reviews_small.csv",
+            len(reviews),
+            "Optional",
+            "Text reviews, ratings, and sentiment used for keywords and content planning."
+        ])
     else:
-        ds_rows.append(["amazon_reviews.csv", 0, "Optional", "Not loaded. Add to enable keyword insights and content briefs."])
+        ds_rows.append([
+            "amazon_reviews_small.csv",
+            0,
+            "Optional",
+            "Not loaded. Add to enable keyword insights and content briefs."
+        ])
     if catalog is not None:
-        ds_rows.append(["amazon_products.csv", len(catalog), "Optional", "Extra product metadata such as titles, categories, and prices."])
+        ds_rows.append([
+            "amazon_products_small.csv",
+            len(catalog),
+            "Optional",
+            "Extra product metadata such as titles, categories, and prices."
+        ])
     else:
-        ds_rows.append(["amazon_products.csv", 0, "Optional", "Not loaded."])
+        ds_rows.append([
+            "amazon_products_small.csv",
+            0,
+            "Optional",
+            "Not loaded."
+        ])
     st.dataframe(pd.DataFrame(ds_rows, columns=["File", "Rows", "Role", "What It Adds"]), use_container_width=True)
 
-    # quick view of missing data to prove we checked it
     st.subheader("Data Quality At A Glance")
     def null_table(df, name):
         if df is None or df.empty:
@@ -570,40 +492,192 @@ with tabs[0]:
     else:
         st.dataframe(dq, use_container_width=True)
 
-    # explain our imputation choice and how it affects only charts, not kpis
     box_info(
         "How We Handle Missing Data",
-        "Core KPIs stay raw so we do not hide problems. For charts only, you can turn on a median-by-category imputation "
-        "using the sidebar checkbox labeled “Turn on median-by-category imputation for charts”. "
-        "If a slice has no rows after filters, the page shows a friendly message."
+        "Core KPIs stay raw so we do not hide problems. For charts only, the app builds a copy of the data where "
+        "missing numeric cells are filled with the median inside each Category_std group. "
+        "If a slice has no rows after filters, the page shows a friendly message instead of breaking."
     )
 
-    # teach the user how to move through the app in simple steps
     st.subheader("How To Read This Dashboard")
     st.write(
         "• Start at Executive Snapshot for KPIs, a month-to-month trend, category mix, and highlights.  \n"
         "• Open each team tab for deeper context and a short caption under each chart that says why it matters.  \n"
+        "• Go to Imputation & Modeling to see how missing data and linear regression are handled.  \n"
         "• Go to Plans & Accountability to download the action list and assign owners."
     )
 
-    # add a gentle caution to avoid empty charts when filters get too narrow
     box_warn(
         "Caution",
         "If you filter to a very small set of categories, some charts may be empty. Widen the selection to see a fuller picture."
     )
 
+# === TAB 1: IMPUTATION & MODELING ===========================================
 
-# executive snapshot shows kpis, trend, category mix, regression, and a simple plan
 with tabs[1]:
-    # big header with month for quick orientation
+    st.header("Imputation & Modeling")
+    st.caption("🧩 This tab shows how missing values were handled and how a simple linear regression model was built.")
+
+    # missingness before imputation
+    st.subheader("Missing Values Before Imputation")
+    if not guard(sales_f, "No data available after filters."):
+        st.stop()
+
+    num_cols_raw = sales_f.select_dtypes(include=["number"]).columns.tolist()
+    if not num_cols_raw:
+        st.write("No numeric columns detected to summarize.")
+    else:
+        miss = sales_f[num_cols_raw].isna().sum()
+        miss = miss[miss > 0].sort_values(ascending=False)
+        if miss.empty:
+            st.write("There are no missing numeric values in this filtered slice.")
+        else:
+            miss_df = miss.reset_index()
+            miss_df.columns = ["column", "missing_count"]
+            miss_df["missing_%"] = (100 * miss_df["missing_count"] / len(sales_f)).round(1)
+            fig_miss = px.bar(
+                miss_df,
+                x="column",
+                y="missing_count",
+                text_auto=".0f",
+                title="Missing Values Per Numeric Column (Before Imputation)"
+            )
+            fig_miss.update_layout(xaxis_title="Column", yaxis_title="Missing Count")
+            st.plotly_chart(fig_miss, use_container_width=True)
+            fig_notes(
+                why="Document where data is incomplete before modeling or visualization.",
+                what="Bars show how many missing values appear in each numeric column.",
+                sowhat="This confirms that the dataset is not perfect and motivates imputation.",
+                nextstep="Compare these gaps with charts on other tabs, which use an imputed copy of the data for visuals."
+            )
+
+    # explanation of the imputation strategy
+    st.subheader("Imputation Strategy Used In This App")
+    st.write(
+        "For charts only, this app uses a simple median imputation by category. "
+        "The idea is to fill missing numeric values with typical values inside each product category, "
+        "instead of dropping rows or guessing a single global number."
+    )
+    st.write(
+        "The steps are:  \n"
+        "1. Group rows by Category_std.  \n"
+        "2. For each numeric column, compute the median inside that category.  \n"
+        "3. Fill missing values with the category median.  \n"
+        "4. If an entire category is missing, fall back to the overall median for that column.  \n"
+        "5. Use these filled values only in chart copies. Core KPIs and action rules still use the raw data."
+    )
+
+    # before vs after imputation histogram for a chosen column
+    st.subheader("Before vs After Imputation Example")
+    if num_cols_raw:
+        example_col = st.selectbox(
+            "Pick a numeric column to compare before and after median-by-category imputation",
+            num_cols_raw
+        )
+        raw_series = sales_f[example_col]
+        imp_series = chart_sales_f[example_col] if example_col in chart_sales_f.columns else raw_series
+
+        comp_df = pd.DataFrame({
+            "value": pd.concat([raw_series, imp_series], ignore_index=True),
+            "Source": (["Raw (missing allowed)"] * len(raw_series)) + (["Imputed for charts"] * len(imp_series))
+        }).dropna(subset=["value"])
+
+        if not comp_df.empty:
+            fig_hist = px.histogram(
+                comp_df,
+                x="value",
+                color="Source",
+                barmode="overlay",
+                opacity=0.6,
+                title=f"Distribution of {example_col} Before and After Imputation"
+            )
+            fig_hist.update_layout(xaxis_title=example_col, yaxis_title="Count")
+            st.plotly_chart(fig_hist, use_container_width=True)
+            fig_notes(
+                why="Show how the median-by-category imputation changes the distribution.",
+                what="The two overlapping histograms compare the raw values with the imputed values.",
+                sowhat="The imputed version fills gaps but keeps the overall shape similar.",
+                nextstep="Use the imputed version for charts that require complete numeric inputs."
+            )
+        else:
+            st.write("Not enough non-missing values to draw a comparison histogram.")
+    else:
+        st.write("There are no numeric columns to demonstrate imputation.")
+
+    # linear regression explanation and results
+    st.subheader("Linear Regression Model: What Drives Purchases?")
+    st.write(
+        "To connect multiple drivers at once, this app uses a simple multiple linear regression model. "
+        "The target (y) is purchased_last_month. The predictors (X) are product_rating, "
+        "discount_percentage, and total_reviews, wherever these columns are present and complete."
+    )
+    st.write(
+        "All predictors and the target are standardized before fitting, and the model is solved with "
+        "numpy.linalg.lstsq, which is ordinary least squares linear regression."
+    )
+
+    coef_df, reg_data, reg_cols = simple_regression_purchases(sales_f)
+    if coef_df is None or coef_df.empty:
+        box_info(
+            "Linear Regression Not Available",
+            "There are not enough complete rows across these categories to fit a simple multiple linear regression. "
+            "Widen the category filters or include more data to see driver effects."
+        )
+    else:
+        st.dataframe(
+            coef_df[["Driver", "Standardized Effect (β)"]],
+            use_container_width=True
+        )
+        best = coef_df.iloc[0]
+        driver_col = best["column"]
+        driver_label = best["Driver"]
+
+        reg_slice = sales_f.loc[reg_data.index].copy()
+        if "Category_std" not in reg_slice.columns:
+            reg_slice["Category_std"] = "All"
+
+        fig_reg = px.scatter(
+            reg_slice,
+            x=driver_col,
+            y="purchased_last_month",
+            color="Category_std",
+            opacity=0.7,
+            title=f"Purchases vs {driver_label} (Linear Regression Driver View)"
+        )
+        fig_reg.update_layout(xaxis_title=driver_label, yaxis_title="Purchases (count)")
+        st.plotly_chart(fig_reg, use_container_width=True)
+
+        fig_notes(
+            why="Summarize how multiple variables relate to purchases at the same time.",
+            what="The table shows standardized linear regression coefficients. The chart shows the strongest driver.",
+            sowhat="A larger positive coefficient means that driver tends to move with higher purchases when others are held steady.",
+            nextstep="Use this ranking to decide whether to push ratings, review volume, or discount clarity first."
+        )
+
+        tone = "good" if best["Driver"].startswith("Rating") and best["Standardized Effect (β)"] > 0 else "ok"
+        desc = (
+            f"{best['Driver']} has the strongest standardized linear relationship with purchases in this slice. "
+            "Focus on this driver before relying on deeper discounts."
+        )
+        box_result("Model Insight From Linear Regression", desc, tone)
+
+    # plain-language wrap for this tab
+    box_info(
+        "What This Page Is Really Saying",
+        "The data is not perfect, so some cells are empty. For charts, the app fills holes with typical values inside each "
+        "category so visuals stay stable. On top of that, a linear regression model shows which levers matter most for purchases "
+        "across the filtered categories, so we know whether to push ratings, reviews, or discounts first."
+    )
+
+# === TAB 2: EXECUTIVE SNAPSHOT ==============================================
+
+with tabs[2]:
     st.header(f"Executive Snapshot — {month_focus}")
     st.caption("📅 Focus for this month, a quick read on the trend, and what to do next.")
 
-    # stop early if there is no data for this slice
     if not guard(curm, "No rows for this month after filters. Pick more categories or another month."):
         st.stop()
 
-    # show four simple kpis with deltas where possible (raw)
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total Purchases", f"{cur['purchases']:,.0f}", None if delta_purch is None else f"{delta_purch:,.0f}")
     c2.metric("Average Rating", f"{cur['rating']:.2f}" if pd.notna(cur['rating']) else "n/a",
@@ -612,8 +686,8 @@ with tabs[1]:
               None if delta_disc is None else f"{delta_disc:+.1f}")
     c4.metric("Total Reviews", f"{cur['reviews']:,.0f}")
 
-    # line chart across months so leaders can see movement fast (chart copy)
-    trend = (chart_sales_f.groupby("month", as_index=False)["purchased_last_month"].sum().sort_values("month"))
+    trend = (chart_sales_f.groupby("month", as_index=False)["purchased_last_month"]
+             .sum().sort_values("month"))
     if guard(trend, "No monthly trend to display."):
         fig = px.line(trend, x="month", y="purchased_last_month", markers=True, title="Purchases Across Months")
         fig.update_layout(xaxis_title="Month", yaxis_title="Purchases (count)")
@@ -625,7 +699,6 @@ with tabs[1]:
             nextstep="If down, check category deltas and discount posture below."
         )
 
-    # simple narrative on whether we grew or fell (raw metrics)
     if delta_purch is None:
         box_info(
             "Baseline Month",
@@ -648,7 +721,6 @@ with tabs[1]:
             "bad"
         )
 
-    # bar chart to show which categories carry the month (chart copy)
     mix = (
         chart_curm.groupby("Category_std", as_index=False)["purchased_last_month"]
         .sum()
@@ -673,7 +745,6 @@ with tabs[1]:
             "good"
         )
 
-    # bar chart showing category increases and decreases month over month (chart copy)
     g = (chart_sales_f.groupby(["month", "Category_std"])["purchased_last_month"].sum().reset_index())
     if guard(g, "No data for month-over-month category change."):
         last_two = g[g["month"].isin([prev_month, month_focus])]
@@ -700,60 +771,6 @@ with tabs[1]:
                     "Review images, copy, and return reasons for the declining category."
                 )
 
-    # NEW: simple regression block to explain what drives purchases
-    st.markdown("### What Drives Purchases? (Simple Regression)")
-
-    coef_df, reg_data, reg_cols = simple_regression_purchases(sales_f)
-    if coef_df is None or coef_df.empty:
-        box_info(
-            "Model Not Available",
-            "There are not enough complete rows across these categories to fit a simple regression. "
-            "Widen the category filters or add more data to see driver insights."
-        )
-    else:
-        # show the standardized effects so graders see a real model
-        st.dataframe(
-            coef_df[["Driver", "Standardized Effect (β)"]]
-            .style.format({"Standardized Effect (β)": "{:.2f}"}),
-            use_container_width=True
-        )
-
-        best = coef_df.iloc[0]
-        driver_col = best["column"]
-        driver_label = best["Driver"]
-
-        # build a slice for the strongest driver with category labels if present
-        reg_slice = sales_f.loc[reg_data.index].copy()
-        if "Category_std" not in reg_slice.columns:
-            reg_slice["Category_std"] = "All"
-
-        fig_reg = px.scatter(
-            reg_slice,
-            x=driver_col,
-            y="purchased_last_month",
-            color="Category_std",
-            opacity=0.7,
-            title=f"Purchases vs {driver_label} (All Months, Filtered Categories)"
-        )
-        fig_reg.update_layout(xaxis_title=driver_label, yaxis_title="Purchases (count)")
-        st.plotly_chart(fig_reg, use_container_width=True)
-
-        fig_notes(
-            why="Quantify which levers relate most to purchases when they move together.",
-            what="The table shows standardized effects from a simple regression model. "
-                 "The chart shows how purchases move with the strongest driver.",
-            sowhat="Positive values mean higher levels of that driver tend to pair with more purchases in this slice.",
-            nextstep="Use this ranking to decide whether to push ratings, review volume, or discount clarity first."
-        )
-
-        tone = "good" if best["Driver"].startswith("Rating") and best["Standardized Effect (β)"] > 0 else "ok"
-        desc = (
-            f"{best['Driver']} has the strongest modeled link with purchases after controlling for the other fields. "
-            "Prioritize moves that improve this driver before leaning on deeper discounts."
-        )
-        box_result("Model Insight", desc, tone)
-
-    # simple next month plan block that adapts to what we saw (raw metrics)
     recs = []
     if delta_purch and delta_purch < 0:
         recs.append("🔴 Finance: Reduce discount depth and test bundles with clear benefits.")
@@ -765,18 +782,31 @@ with tabs[1]:
         recs.append("✅ Keep scaling creator content and keep PDP copy short, visual, and specific.")
     box_result("Next Month Plan", " • " + "\n • ".join(recs), "ok")
 
+    # plain-language wrap for this tab
+    if delta_purch is None:
+        headline = f"This is the starting month for the filtered categories in {month_focus}."
+    elif delta_purch > 0:
+        headline = f"Purchases are up this month compared to {prev_month}."
+    else:
+        headline = f"Purchases are down this month compared to {prev_month}."
 
-# finance and ops focuses on discount posture and volume drivers
-with tabs[2]:
-    # orient the user to the month again
+    box_info(
+        "What This Page Is Really Saying",
+        headline
+        + " The line chart shows whether momentum is up or down. The bar charts reveal which categories carry the month "
+        "and which ones moved the most since last month. The result boxes at the top give a fast read on volume, average "
+        "rating, discount posture, and review activity so you know if this month is healthy or needs a course correction."
+    )
+
+# === TAB 3: FINANCE & OPS ===================================================
+
+with tabs[3]:
     st.header(f"Finance & Operations — {month_focus}")
     st.caption("📊 This tab focuses on volume drivers, discount posture, and operational guardrails.")
 
-    # use the same guard pattern to avoid empty plots
     if not guard(curm, "No rows for this month after filters."):
         st.stop()
 
-    # scatter to check if volume depends on average discount levels by category (chart copy)
     by_cat = (
         chart_curm.groupby("Category_std", as_index=False)
         .agg(purchases=("purchased_last_month", "sum"),
@@ -793,7 +823,6 @@ with tabs[2]:
             sowhat="If high volume sits at high discount, margin is at risk.",
             nextstep="Move some gains to bundles and sharper product value copy."
         )
-        # call out the top volume driver and label it as good or ok depending on discount depth
         lead = by_cat.sort_values("purchases", ascending=False).head(1)
         if not lead.empty:
             r = lead.iloc[0]
@@ -804,7 +833,6 @@ with tabs[2]:
                 level
             )
 
-    # box plot of discount distribution by category to see spread and medians (chart copy)
     if "discount_percentage" in chart_curm.columns and chart_curm["discount_percentage"].notna().any():
         fig2 = px.box(chart_curm.dropna(subset=["discount_percentage"]),
                       x="Category_std", y="discount_percentage", color="Category_std",
@@ -829,7 +857,6 @@ with tabs[2]:
                 "Heavy average discounts can hide product clarity problems. Fix value messaging before raising promo depth."
             )
 
-    # add a simple operations checklist so this tab ends with action
     ops = [
         "✅ Check stock and shipping for top 3 categories with the largest increase.",
         "✅ Review return reasons for any category that increased discounts without a volume lift.",
@@ -837,25 +864,30 @@ with tabs[2]:
     ]
     box_info("Operations Checklist", " • " + "\n • ".join(ops))
 
+    # plain-language wrap for this tab
+    box_info(
+        "What This Page Is Really Saying",
+        "This page connects money and mechanics. The scatter shows whether big sales only happen when discounts are deep, "
+        "which puts margin at risk. The box plot shows how wild or controlled your discounts are inside each category. "
+        "If discounts are heavy and spread out, finance and ops should tighten promo rules and clean up product pages "
+        "so volume is less dependent on price cuts."
+    )
 
-# marketing and content strategy translates signals into platform and content moves
-with tabs[3]:
-    # orient the user to the month again
+# === TAB 4: MARKETING & CONTENT ============================================
+
+with tabs[4]:
     st.header(f"Marketing & Content Strategy — {month_focus}")
     st.caption("🎬 This tab turns ratings and reviews into a content plan that non-technical teams can use.")
 
-    # avoid empty charts with a simple guard
     if not guard(curm, "No rows for this month after filters."):
         st.stop()
 
-    # frame the focus for the month so the team knows what to look for
     box_info(
         "Focus For This Month",
         "We will identify which categories convince people without heavy discounts, "
         "which topics block conversion, and what content to publish by platform."
     )
 
-    # engagement map uses rating and review counts, with bubble size for purchases if valid (chart copy)
     plot_df = chart_curm.dropna(subset=["product_rating"])
     if guard(plot_df, "No rating values to visualize."):
         sizes = safe_bubble_sizes(plot_df.get("purchased_last_month"))
@@ -875,7 +907,6 @@ with tabs[3]:
             sowhat="High rating with many reviews is a signal to scale with social proof.",
             nextstep="Add short creator videos and pin top reviews on the product page."
         )
-        # highlight the strongest advocacy signal based on combined ranks
         top = (plot_df.assign(score=lambda d: d["product_rating"].rank(pct=True)
                                            + safe_num(d["total_reviews"]).rank(pct=True))
                       .sort_values("score", ascending=False).head(1))
@@ -887,7 +918,6 @@ with tabs[3]:
                 "good"
             )
 
-    # conversion proxy uses purchases per review to find categories that convert efficiently (chart copy)
     conv = (chart_curm.groupby("Category_std", as_index=False)
                  .agg(purchases=("purchased_last_month", "sum"),
                       reviews=("total_reviews", "sum")))
@@ -915,7 +945,6 @@ with tabs[3]:
                 "good"
             )
 
-    # if reviews text exists, extract frequent words for simple content prompts (raw reviews)
     if reviews is not None and "review_text" in reviews.columns:
         rcur = reviews.copy()
         if "month" in rcur.columns:
@@ -944,27 +973,20 @@ with tabs[3]:
                     "Do not copy words blindly. Skim a few reviews to confirm real meaning before posting."
                 )
 
-    # build a simple platform mix suggestion using rule-of-thumb weights (chart copy)
     plat = (chart_curm.groupby("Category_std", as_index=False)
                  .agg(rating=("product_rating", "mean"),
                       reviews=("total_reviews", "sum"),
                       price=("discounted_price", "median")))
     if guard(plat, "Not enough fields to build a platform plan."):
         def platform_row(r):
-            # initialize shares as zeros, we will normalize later
             tiktok = 0.0; reels = 0.0; youtube = 0.0; paid = 0.0
-            # if we have ratings and reviews we can decide initial direction
             if pd.notna(r["rating"]) and pd.notna(r["reviews"]):
-                # high rating and high reviews favor short form social proof
                 if r["rating"] >= 4.2 and r["reviews"] >= np.nanpercentile(plat["reviews"], 60):
                     tiktok += 0.35; reels += 0.35
-                # mid rating and higher price favor explainer videos
                 if (r["rating"] < 4.2 and pd.notna(r["price"]) and r["price"] >= np.nanmedian(plat["price"])):
                     youtube += 0.4
-                # low reviews and low rating favor paid search to test clarity
                 if r["reviews"] < np.nanpercentile(plat["reviews"], 40) and r["rating"] < 4.1:
                     paid += 0.4
-            # avoid divide by zero and normalize to 100 percent
             s = tiktok + reels + youtube + paid
             if s == 0: s = 1.0
             return pd.Series({
@@ -973,12 +995,9 @@ with tabs[3]:
                 "YouTube": round(100 * youtube / s, 1),
                 "Paid Search": round(100 * paid / s, 1),
             })
-        # apply rule to each category
-        mix = plat.join(plat.apply(platform_row, axis=1))
-        # reshape for a stacked bar chart
-        melt = mix.melt(id_vars=["Category_std"], value_vars=["TikTok", "IG Reels", "YouTube", "Paid Search"],
-                        var_name="Platform", value_name="Share %")
-        # draw the stacked bar chart to show the suggested split
+        mix_plat = plat.join(plat.apply(platform_row, axis=1))
+        melt = mix_plat.melt(id_vars=["Category_std"], value_vars=["TikTok", "IG Reels", "YouTube", "Paid Search"],
+                             var_name="Platform", value_name="Share %")
         figpm = px.bar(melt, x="Category_std", y="Share %", color="Platform", barmode="stack",
                        title="Recommended Platform Mix By Category")
         st.plotly_chart(figpm, use_container_width=True)
@@ -989,14 +1008,11 @@ with tabs[3]:
             nextstep="Use this split for the next sprint and adjust based on results."
         )
 
-    # create a seven day content plan that is easy to follow (raw or imputed does not matter)
     st.markdown("### Seven-Day Content Plan")
-    # choose top categories so the plan feels specific
     top_cats = (chart_curm.groupby("Category_std")["purchased_last_month"]
                 .sum().sort_values(ascending=False).head(3).index.tolist())
     if not top_cats:
         top_cats = ["Top Category"]
-    # write seven simple prompts that a non technical teammate could film
     cal = [
         f"📅 Day 1 — Creator short (15–30s): “Why {top_cats[0]} solves a real problem.” Show it in use.",
         f"📅 Day 2 — Product page demo: unbox {top_cats[0]} and cover the top three benefits in under 30 seconds.",
@@ -1006,23 +1022,27 @@ with tabs[3]:
         f"📅 Day 6 — Daily use montage: three quick shots that show real life use cases.",
         f"📅 Day 7 — Community Q&A: answer two real customer questions in 30 seconds each.",
     ]
-    # small info box that explains where to publish
     box_info("Publishing Guide", "Post on TikTok and IG Reels. Pin the best demo to the product page hero video.")
-    # show the plan as a clean bulleted list
     st.markdown("\n".join([f"- {row}" for row in cal]))
 
+    # plain-language wrap for this tab
+    box_info(
+        "What This Page Is Really Saying",
+        "This page is about telling the story so shoppers believe and buy. The engagement map shows which categories already "
+        "have strong ratings and lots of reviews, which are perfect for creator content and social proof. The conversion proxy "
+        "shows where each review is pulling real weight. Frequent words from reviews turn into content topics. The platform mix "
+        "and seven-day plan give a simple posting schedule so the marketing team does not have to guess where to start."
+    )
 
-# product and pricing reviews quality signals and how price ladders look
-with tabs[4]:
-    # orient the user to the month again
+# === TAB 5: PRODUCT & PRICING ==============================================
+
+with tabs[5]:
     st.header(f"Product & Pricing — {month_focus}")
     st.caption("🧪 This tab shows quality signals and how prices step down from list.")
 
-    # avoid empty charts with a simple guard
     if not guard(curm, "No rows for this month after filters."):
         st.stop()
 
-    # box plots of rating distributions help find friction (chart copy)
     if "product_rating" in chart_curm.columns and chart_curm["product_rating"].notna().any():
         figp1 = px.box(chart_curm.dropna(subset=["product_rating"]),
                        x="Category_std", y="product_rating", color="Category_std",
@@ -1035,14 +1055,12 @@ with tabs[4]:
             sowhat="Low medians signal friction or wrong expectations.",
             nextstep="Add short demos and clarify sizing and care details."
         )
-        # flag the lowest average rating so the team knows what to fix first (raw or chart gives same story)
         worst = curm.groupby("Category_std")["product_rating"].mean().sort_values().head(1)
         if not worst.empty:
             wcat, wr = worst.index[0], worst.values[0]
             level = "bad" if wr < 4.0 else "ok"
             box_result("Quality Signal", f"{wcat} averages {wr:.2f} stars. Add demos and clear benefit bullets.", level)
 
-    # price ladder compares median original price with median discounted price (chart copy)
     if {"original_price", "discounted_price"}.issubset(chart_curm.columns):
         ladder = (chart_curm[["Category_std", "original_price", "discounted_price"]]
                   .dropna().groupby("Category_std").median().reset_index())
@@ -1057,14 +1075,12 @@ with tabs[4]:
                 sowhat="Large gaps suggest reliance on promos.",
                 nextstep="Test lighter promos paired with clearer product value bullets."
             )
-            # if a category’s discounted price is far below list, warn about promo dependence
             heavy = ladder[ladder["discounted_price"] <= 0.7 * ladder["original_price"]]
             tone = "ok" if heavy.empty else "bad"
             msg = "Median discounted prices sit near list. This is healthy." if heavy.empty else \
                   "Some categories lean on deep discounts. Test lighter promos with sharper value messages."
             box_result("Pricing Posture", msg, tone)
 
-    # create a small table of underperformers to focus fix efforts (raw to keep flags honest)
     under = (curm.assign(rating=curm["product_rating"],
                          purch=curm["purchased_last_month"])
                   .dropna(subset=["rating", "purch"]))
@@ -1090,17 +1106,23 @@ with tabs[4]:
             "Low-rating, high-volume items often create support tickets and returns. Fix these first to protect margin."
         )
 
+    # plain-language wrap for this tab
+    box_info(
+        "What This Page Is Really Saying",
+        "Here you see whether the products themselves are doing their job. The rating boxes show which categories customers "
+        "like and which ones feel confusing or disappointing. The price ladder shows how far you are cutting from list to get "
+        "a sale. The underperformer table points to specific products that are both visible and low rated, which are the first "
+        "place to fix descriptions, images, and expectations before spending more on traffic."
+    )
 
-# plans and accountability converts insights into a short todo list
-with tabs[5]:
-    # title for the action tab
+# === TAB 6: PLANS & ACCOUNTABILITY =========================================
+
+with tabs[6]:
     st.header("Plans & Accountability")
     st.caption("🗂️ Concrete items with owners and due dates that match this month’s story.")
 
-    # start an empty list and add items from simple rules below
     actions = []
 
-    # choose the category with the largest month over month move and assign to executive (raw sales_f)
     g = (sales_f.groupby(["month", "Category_std"])["purchased_last_month"].sum()
          .reset_index().sort_values("month"))
     if not g.empty and prev_month in g["month"].values and month_focus in g["month"].values:
@@ -1115,40 +1137,42 @@ with tabs[5]:
                                 action=f"{cat} moved {direction} by {abs(d):,.0f} MoM. Set a numeric target and an owner.",
                                 priority="High", due=(date.today() + timedelta(days=7)).isoformat(), status="Open"))
 
-    # if review momentum weakens, assign a marketing refresh (raw totals)
     if cur["reviews"] and pre["reviews"] and cur["reviews"] < pre["reviews"]:
         actions.append(dict(team="Marketing & Content",
                             action="Review volume slipped. Refresh creatives, seed UGC, and add social proof blocks on PDP.",
                             priority="High", due=(date.today() + timedelta(days=10)).isoformat(), status="Open"))
 
-    # if discounts look heavy, assign a finance test on lighter promos (raw)
     if pd.notna(cur["disc"]) and cur["disc"] >= 30:
         actions.append(dict(team="Finance & Ops",
                             action=f"Average discount {cur['disc']:.1f}%. Test lighter discounts with bundles and sharper value bullets.",
                             priority="Medium", due=(date.today() + timedelta(days=14)).isoformat(), status="Open"))
 
-    # if a category rating is low, assign a product content fix (raw)
     lowcat = curm.groupby("Category_std")["product_rating"].mean().sort_values().head(1)
     if not lowcat.empty and lowcat.values[0] < 4.0:
         actions.append(dict(team="Product & Pricing",
                             action=f"{lowcat.index[0]} averages {lowcat.values[0]:.2f}★. Add 20 to 30 second demos and clarify sizing and care.",
                             priority="Medium", due=(date.today() + timedelta(days=14)).isoformat(), status="Open"))
 
-    # always include a cross team share so people actually see the plan
     actions.append(dict(team="Cross-Team",
                         action="Record a 10-minute Loom walkthrough linking to this hub and the key wins and issues.",
                         priority="Low", due=(date.today() + timedelta(days=5)).isoformat(), status="Open"))
 
-    # render the table and a download button if we have any items
     if actions:
         act_df = pd.DataFrame(actions, columns=["team", "action", "priority", "due", "status"])
         st.dataframe(act_df, use_container_width=True)
         st.download_button(
             "Download Action Plan (CSV)",
             act_df.to_csv(index=False).encode("utf-8"),
-            file_name="action_plan.csv",
-            mime="text/csv"
+            "amazon_action_plan.csv",
+            "text/csv"
         )
-        box_info("How To Use This List", "Share the CSV in your team channel and assign owners immediately.")
     else:
-        box_warn("No Actions Generated", "Try a different month or widen categories to reveal more signals.")
+        st.write("No actions were generated for this slice.")
+
+    # plain-language wrap for this tab
+    box_info(
+        "What This Page Is Really Saying",
+        "This page turns the whole dashboard into a to-do list. Each row assigns a team, an action, a priority, and a due date "
+        "based on what happened this month. Instead of just staring at charts, leaders can download this list, share it, and "
+        "track whether the next month’s numbers moved in the right direction."
+    )
