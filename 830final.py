@@ -1427,6 +1427,13 @@ with tabs[6]:
         st.write(
             "_Use this table as a living plan. Assign owners, update statuses, and rerun the dashboard each month to track progress._"
         )
+                st.subheader("How to Use This Page")
+        st.write(
+            "• Filter the dashboard to this month and export the plan.  \n"
+            "• Add owners and specific due dates in your project tool.  \n"
+            "• In the next month’s run, review which actions closed and which need follow up.  \n"
+            "• Use changes in the Executive Snapshot to update or retire actions over time."
+        )
     else:
         st.write("No actions generated for this slice. Try a different month or a wider category selection.")
-
+        
