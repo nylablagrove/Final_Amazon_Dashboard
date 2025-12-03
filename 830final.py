@@ -1427,7 +1427,7 @@ with tabs[6]:
         st.write(
             "_Use this table as a living plan. Assign owners, update statuses, and rerun the dashboard each month to track progress._"
         )
-                st.subheader("How to Use This Page")
+        st.subheader("How to Use This Page")
         st.write(
             "• Filter the dashboard to this month and export the plan.  \n"
             "• Add owners and specific due dates in your project tool.  \n"
